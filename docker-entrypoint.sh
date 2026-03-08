@@ -1,10 +1,13 @@
 #!/bin/sh
-set -e
 
-# If /app/html is mounted and is empty, copy default frontend files
-if [ -d "/app/html" ] && [ -z "$(ls -A /app/html 2>/dev/null)" ]; then
-    echo "Initializing /app/html with default frontend files..."
-    cp -a /app/frontend/* /app/html/ 2>/dev/null || echo "Warning: Could not copy default files to /app/html. Check directory permissions."
+# Check if the mapped directory is empty by looking for index.html
+if [ ! -f "/app/html/index.html" ]; then
+    echo "First run detected. Populating /app/html with frontend files..."
+    cp -R /app/frontend/* /app/html/
+    echo "Files copied successfully."
+else
+    echo "Existing frontend files detected in /app/html. Skipping copy."
 fi
 
+# Hand over control to the Node application
 exec "$@"
