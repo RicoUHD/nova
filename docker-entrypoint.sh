@@ -7,23 +7,29 @@ frontend_dir="${FRONTEND_DIR:-/app/html}"
 frontend_seed_dir="${FRONTEND_SEED_DIR:-/app/html-seed}"
 runtime_user="${RUNTIME_USER:-node}"
 
+# BusyBox `su -c` treats the first argument after the command string as $0,
+# so we pass a placeholder before the real arguments that the nested shell uses.
 run_shell_as_runtime_user() {
     shell_command="$1"
     shift
 
     if [ "$(id -u)" -eq 0 ]; then
         current_dir=$(pwd)
-        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && command="$1" && shift && exec sh -c "$command" runtime-sh "$@"' -- argv0 "$current_dir" "$shell_command" "$@"
+        # BusyBox `su -c` consumes the first post-command argument as $0.
+        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && command="$1" && shift && exec sh -c "$command" runtime-sh "$@"' -- su-placeholder "$current_dir" "$shell_command" "$@"
         return
     fi
 
     sh -c "$shell_command" runtime-sh "$@"
 }
 
+# Preserve the current working directory so relative CMD paths like
+# `node backend/server.js` still resolve after dropping privileges.
 run_as_runtime_user() {
     if [ "$(id -u)" -eq 0 ]; then
         current_dir=$(pwd)
-        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && exec "$@"' -- argv0 "$current_dir" "$@"
+        # Keep a placeholder for $0 so the preserved working directory stays in $1.
+        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && exec "$@"' -- su-placeholder "$current_dir" "$@"
         return
     fi
 
@@ -62,7 +68,7 @@ ensure_writable_dir "$frontend_dir" "Frontend"
 # Check if the mapped directory is empty by looking for index.html
 if [ ! -f "$frontend_dir/index.html" ]; then
     echo "First run detected. Populating $frontend_dir with frontend files..."
-    run_shell_as_runtime_user 'cp -R "$1"/. "$2"' "$frontend_seed_dir" "$frontend_dir"
+    run_shell_as_runtime_user 'cp -Rp "$1"/. "$2"' "$frontend_seed_dir" "$frontend_dir"
     echo "Files copied successfully."
 else
     echo "Existing frontend files detected in $frontend_dir. Skipping copy."
