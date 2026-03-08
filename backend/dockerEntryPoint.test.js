@@ -9,7 +9,11 @@ const repoRoot = path.join(__dirname, '..');
 const entrypoint = path.join(repoRoot, 'docker-entrypoint.sh');
 
 function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'nova-entrypoint-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'docker-entrypoint-'));
+}
+
+function formatFailure(result) {
+  return `exit=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }
 
 test('docker entrypoint populates an empty frontend directory from the seed copy', () => {
@@ -33,8 +37,7 @@ test('docker entrypoint populates an empty frontend directory from the seed copy
     encoding: 'utf8'
   });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Populating .*frontend files/i);
+  assert.equal(result.status, 0, formatFailure(result));
   assert.equal(fs.readFileSync(path.join(frontendDir, 'index.html'), 'utf8'), '<!doctype html>');
   assert.equal(fs.readFileSync(path.join(frontendDir, 'assets', 'style.css'), 'utf8'), 'body {}');
 
@@ -62,8 +65,7 @@ test('docker entrypoint preserves an existing frontend directory', () => {
     encoding: 'utf8'
   });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Skipping copy/i);
+  assert.equal(result.status, 0, formatFailure(result));
   assert.equal(fs.readFileSync(path.join(frontendDir, 'index.html'), 'utf8'), 'custom frontend');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });

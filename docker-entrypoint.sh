@@ -7,9 +7,23 @@ frontend_dir="${FRONTEND_DIR:-/app/html}"
 frontend_seed_dir="${FRONTEND_SEED_DIR:-/app/html-seed}"
 runtime_user="${RUNTIME_USER:-node}"
 
+run_shell_as_runtime_user() {
+    shell_command="$1"
+    shift
+
+    if [ "$(id -u)" -eq 0 ]; then
+        current_dir=$(pwd)
+        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && command="$1" && shift && exec sh -c "$command" runtime-sh "$@"' -- argv0 "$current_dir" "$shell_command" "$@"
+        return
+    fi
+
+    sh -c "$shell_command" runtime-sh "$@"
+}
+
 run_as_runtime_user() {
     if [ "$(id -u)" -eq 0 ]; then
-        su "$runtime_user" -s /bin/sh -c 'exec "$@"' -- sh "$@"
+        current_dir=$(pwd)
+        su "$runtime_user" -s /bin/sh -c 'cd "$1" && shift && exec "$@"' -- argv0 "$current_dir" "$@"
         return
     fi
 
@@ -18,13 +32,7 @@ run_as_runtime_user() {
 
 runtime_user_can_write_dir() {
     dir="$1"
-
-    if [ "$(id -u)" -eq 0 ]; then
-        su "$runtime_user" -s /bin/sh -c 'test -w "$1"' -- sh "$dir"
-        return
-    fi
-
-    [ -w "$dir" ]
+    run_shell_as_runtime_user 'test -w "$1"' "$dir"
 }
 
 ensure_writable_dir() {
@@ -54,13 +62,7 @@ ensure_writable_dir "$frontend_dir" "Frontend"
 # Check if the mapped directory is empty by looking for index.html
 if [ ! -f "$frontend_dir/index.html" ]; then
     echo "First run detected. Populating $frontend_dir with frontend files..."
-
-    if [ "$(id -u)" -eq 0 ]; then
-        su "$runtime_user" -s /bin/sh -c 'cp -R "$1"/. "$2"/' -- sh "$frontend_seed_dir" "$frontend_dir"
-    else
-        cp -R "$frontend_seed_dir"/. "$frontend_dir"/
-    fi
-
+    run_shell_as_runtime_user 'cp -R "$1"/. "$2"' "$frontend_seed_dir" "$frontend_dir"
     echo "Files copied successfully."
 else
     echo "Existing frontend files detected in $frontend_dir. Skipping copy."
