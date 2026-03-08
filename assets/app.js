@@ -97,7 +97,7 @@ async function fetchWithAuth(url, options = {}) {
     try {
         token = await auth.currentUser.getIdToken();
     } catch (tokenError) {
-        throw new Error('Authentifizierung fehlgeschlagen. Bitte erneut anmelden. (' + (tokenError.code || tokenError.message || 'Unbekannter Fehler') + ')');
+        throw new Error('Authentifizierung fehlgeschlagen. Bitte erneut anmelden. (' + (tokenError?.code || tokenError?.message || 'Unbekannter Fehler') + ')');
     }
     const headers = {
         ...(options.headers || {}),

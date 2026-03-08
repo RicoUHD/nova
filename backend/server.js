@@ -19,18 +19,23 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 try {
   fs.accessSync(dataDir, fs.constants.W_OK);
 } catch {
-  console.error(`Data directory is not writable: ${dataDir}. Check volume mount permissions.`);
+  console.warn(`Warning: Data directory is not writable: ${dataDir}. Check volume mount permissions.`);
 }
 
 const configFile = path.join(dataDir, 'config.json');
 
 // Frontend directory: use FRONTEND_DIR env var, or fall back to ../html (Docker), then .. (dev)
-const frontendDirEnv = process.env.FRONTEND_DIR;
-const resolvedFrontendDir = frontendDirEnv
-  ? path.resolve(frontendDirEnv)
-  : fs.existsSync(path.join(__dirname, '..', 'html'))
-    ? path.join(__dirname, '..', 'html')
-    : path.join(__dirname, '..');
+function resolveFrontendDirectory() {
+  if (process.env.FRONTEND_DIR) {
+    return path.resolve(process.env.FRONTEND_DIR);
+  }
+  const htmlDir = path.join(__dirname, '..', 'html');
+  if (fs.existsSync(htmlDir)) {
+    return htmlDir;
+  }
+  return path.join(__dirname, '..');
+}
+const resolvedFrontendDir = resolveFrontendDirectory();
 
 const bundledChurchLogoFile = path.join(resolvedFrontendDir, 'assets', 'church-logo.svg');
 const churchLogoFile = path.join(dataDir, 'church-logo.svg');
