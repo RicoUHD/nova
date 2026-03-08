@@ -17,14 +17,16 @@ COPY manifest.json ./frontend/
 COPY sw.js ./frontend/
 COPY setup.html ./frontend/
 
-# Create the data and html directories
-RUN mkdir -p /app/data /app/html && chown -R node:node /app/data /app/html /app/frontend
+# Create the directories and assign ownership to UID 99 (nobody) and GID 100 (users)
+RUN mkdir -p /app/data /app/html /app/frontend && \
+    chown -R 99:100 /app
 
 COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chown 99:100 /app/docker-entrypoint.sh
 
-# Use a non-root user
-USER node
+# Switch to UID 99 and GID 100 to perfectly match the host storage permissions
+USER 99:100
 
 EXPOSE 3000
 
