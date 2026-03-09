@@ -65,10 +65,18 @@ ensure_writable_dir() {
 ensure_writable_dir "$data_dir" "Data"
 ensure_writable_dir "$frontend_dir" "Frontend"
 
-# Check if the mapped directory is empty by looking for index.html
+# Check if the mapped directory is empty by looking for index.html 
 if [ ! -f "$frontend_dir/index.html" ]; then
     echo "First run detected. Populating $frontend_dir with frontend files..."
-    run_shell_as_runtime_user 'cp -Rp "$1"/. "$2"' "$frontend_seed_dir" "$frontend_dir"
+    
+    # Copy files directly as root to avoid BusyBox su limitations
+    cp -R "$frontend_seed_dir"/. "$frontend_dir"
+    
+    # Immediately hand ownership to the runtime user
+    if [ "$(id -u)" -eq 0 ]; then
+        chown -R "$runtime_user":"$runtime_user" "$frontend_dir"
+    fi
+    
     echo "Files copied successfully."
 else
     echo "Existing frontend files detected in $frontend_dir. Skipping copy."
