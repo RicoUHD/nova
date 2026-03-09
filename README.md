@@ -3,11 +3,11 @@
   <h1>Nova</h1>
   <p>
     <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPLv3" /></a>
-    <a href="https://ghcr.io/ricouhd/nova"><img src="https://img.shields.io/docker/pulls/ricouhd/nova" alt="Docker Pulls" /></a>
+    <a href="https://ghcr.io/ricouhd/nova"><img src="https://img.shields.io/badge/GHCR-Ready-brightgreen.svg?logo=docker" alt="GHCR Ready" /></a>
   </p>
 </div>
 
-JuBa-Kasse (Nova) is a web-based financial management application for small groups, clubs, or flatshares. It provides features to track income, expenses, donations, and individual members' contributions. The app consists of a frontend written in HTML/JS and a Node.js backend for handling file uploads, email notifications, and configuration.
+Nova is a web-based financial management application for small groups, clubs, or flatshares. It provides features to track income, expenses, donations, and individual members' contributions. The app consists of a frontend written in HTML/JS and a Node.js backend for handling file uploads, email notifications, and configuration.
 
 ## Features
 
