@@ -31,7 +31,7 @@
 
     <div class="app-layout">
         <header class="header">
-            <img src="assets/church-logo.svg" alt="JuBa-Kasse Logo">
+            <img src="assets/church-logo.svg" alt="Nova Logo">
             <h1 id="app-name-header">Nova</h1>
         </header>
 
@@ -656,7 +656,7 @@
 
 <script>
     // Optimistic UI: Check if we expect to be logged in to avoid flash of login screen
-    if (localStorage.getItem('juba-is-logged-in') === 'true') {
+    if (localStorage.getItem('nova-is-logged-in') === 'true') {
         document.getElementById('login-modal').classList.remove('show');
         const loader = document.getElementById('loading-overlay');
         if(loader) loader.style.display = 'flex';

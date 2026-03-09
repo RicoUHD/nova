@@ -2485,8 +2485,8 @@ window.sendStatusEmail = async (personId) => {
     };
     const readableStatus = statusLabels[currentStatus] || currentStatus;
 
-    const subject = 'Dein aktueller Kassenstatus - JuBa-Kasse';
-    const text = `Hallo ${person.name},\n\ndein aktueller Status ist: ${readableStatus}.\nDu bist aktuell ${statusMeta.text}.\nOffener Betrag: ${formatCurrency(overdueAmount)} €.\n\nViele Grüße,\nDein JuBa-Kasse Team`;
+    const subject = 'Dein aktueller Kassenstatus - Nova';
+    const text = `Hallo ${person.name},\n\ndein aktueller Status ist: ${readableStatus}.\nDu bist aktuell ${statusMeta.text}.\nOffener Betrag: ${formatCurrency(overdueAmount)} €.\n\nViele Grüße,\nDein Nova Team`;
     const html = `
         <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
             <h2>Hallo ${escapeHtml(person.name)},</h2>
@@ -2495,7 +2495,7 @@ window.sendStatusEmail = async (personId) => {
             ${statusMeta.isOverdue ? `<p style="color: red; font-size: 1.1em; font-weight: bold;">Offener Betrag: ${formatCurrency(overdueAmount)} €</p>` : `<p style="color: green;">Dein Konto ist ausgeglichen.</p>`}
             <br>
             <p>Viele Grüße,</p>
-            <p>Dein JuBa-Kasse Team</p>
+            <p>Dein Nova Team</p>
         </div>
     `;
 
@@ -2782,12 +2782,12 @@ async function saveNewPerson(person) {
 }
 
 function initTheme() {
-    const t = localStorage.getItem('juba-theme') || 'system';
+    const t = localStorage.getItem('nova-theme') || 'system';
     window.setTheme(t);
 
     // Listen for OS theme changes if 'system' is active
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-        if (localStorage.getItem('juba-theme') === 'system') {
+        if (localStorage.getItem('nova-theme') === 'system') {
             applyActualTheme('system');
         }
     });
@@ -2803,7 +2803,7 @@ function applyActualTheme(t) {
 }
 
 window.setTheme = (t) => {
-    localStorage.setItem('juba-theme', t);
+    localStorage.setItem('nova-theme', t);
     applyActualTheme(t);
 
     // Update active button state
@@ -2860,7 +2860,7 @@ onAuthStateChanged(auth, async (user) => {
         if(loader) loader.style.display = 'flex';
         setLoadingMessage('Profil wird geladen...');
 
-        localStorage.setItem('juba-is-logged-in', 'true');
+        localStorage.setItem('nova-is-logged-in', 'true');
         const profile = await fetchUserProfile(user.uid, 2);
         if(profile) {
             currentUser = profile;
@@ -2878,7 +2878,7 @@ onAuthStateChanged(auth, async (user) => {
         const loader = document.getElementById('loading-overlay');
         if(loader) loader.style.display = 'none';
 
-        localStorage.removeItem('juba-is-logged-in');
+        localStorage.removeItem('nova-is-logged-in');
         isAuthenticated = false;
         advancedConfigLoaded = false;
         advancedConfigAppName = null;
