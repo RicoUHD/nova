@@ -11,9 +11,6 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # This single line acts as an impenetrable gate. 
-    # It stops the build entirely if the release is checked as a "pre-release".
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     permissions:
       contents: read
       packages: write
@@ -42,15 +39,14 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            # 1. Definitively applies the 'latest' tag every time this runs.
-            # (Because the job aborts on pre-releases, this is 100% safe).
-            type=raw,value=latest
+            # 1. Applies 'latest' ONLY for full releases or manual triggers
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
             
-            # 2. Applies the exact version from your Git release tag (e.g., v1.5.0)
+            # 2. Applies 'beta' ONLY if the GitHub release is checked as a "pre-release"
+            type=raw,value=beta,enable=${{ github.event.release.prerelease == true }}
+            
+            # 3. Applies the exact version from your Git release tag (e.g., v1.5.0 or v1.6.0-beta.1)
             type=ref,event=tag
-            
-            # 3. Applies the short commit SHA for precise tracking
-            type=sha
 
       - name: Build and push image
         uses: docker/build-push-action@v6
