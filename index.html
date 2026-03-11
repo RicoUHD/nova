@@ -253,6 +253,38 @@
                             </div>
                         </div>
 
+                        <div style="font-weight:800; margin-bottom:15px; margin-top: 25px; font-size: 1rem;">PocketBase Migration Add-on (Optional)</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:15px;">
+                            Verwendet weiterhin die bestehende Firebase-Konfiguration und kopiert Daten nur bei manuellem Start nach PocketBase. Nach der Migration kann dieser Abschnitt samt Backend-Add-on wieder entfernt werden.
+                        </div>
+
+                        <div class="settings-flex-row">
+                            <div class="form-group" style="flex: 2; min-width: 180px;">
+                                <label class="form-label" for="super-admin-pocketbase-url">PocketBase URL</label>
+                                <input type="url" id="super-admin-pocketbase-url" class="form-input" placeholder="https://pocketbase.example.com">
+                            </div>
+                            <div class="form-group" style="flex: 1; min-width: 180px;">
+                                <label class="form-label" for="super-admin-pocketbase-admin-email">Admin E-Mail</label>
+                                <input type="email" id="super-admin-pocketbase-admin-email" class="form-input" placeholder="admin@example.com">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="super-admin-pocketbase-admin-password">Admin Passwort</label>
+                            <input type="password" id="super-admin-pocketbase-admin-password" class="form-input" placeholder="PocketBase Admin Passwort">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="super-admin-pocketbase-mappings">Migrations-Mapping (JSON)</label>
+                            <textarea id="super-admin-pocketbase-mappings" class="form-input" rows="10" spellcheck="false" style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        </div>
+
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px;">
+                            <button class="btn btn-secondary" type="button" onclick="runPocketBaseMigration(true)">PocketBase Dry-Run</button>
+                            <button class="btn btn-primary" type="button" onclick="runPocketBaseMigration(false)">PocketBase Migration starten</button>
+                        </div>
+                        <pre id="super-admin-pocketbase-migration-result" style="margin-top:15px; white-space:pre-wrap; font-size:0.8rem; background: rgba(15, 23, 42, 0.08); padding: 12px; border-radius: 10px; max-height: 220px; overflow: auto;"></pre>
+
                         <button class="btn btn-danger btn-block" style="margin-top: 10px;" onclick="saveAdvancedSystemConfig()">Erweiterte System-Konfiguration speichern</button>
                     </div>
                 </div>
