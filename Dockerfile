@@ -31,7 +31,7 @@ COPY --chown=node:node sw.js ./html/
 COPY --chown=node:node setup.html ./html/
 
 # Create the directories and assign ownership to the bundled node user (UID 1000)
-RUN mkdir -p /app/data /app/data/pocketbase /app/html-seed && \
+RUN mkdir -p /app/data /app/db /app/html-seed && \
     cp -R /app/html/. /app/html-seed/ && \
     chmod +x /app/pocketbase && \
     chown -R node:node /app

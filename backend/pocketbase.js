@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const { resolvePocketBaseDirectory } = require('./pathConfig');
 
 const execFileAsync = promisify(execFile);
 
@@ -90,7 +91,7 @@ function getPocketBaseBinaryPath() {
 }
 
 function getPocketBaseDataDir() {
-  return process.env.POCKETBASE_DIR || path.join(process.env.DATA_DIR || '/app/data', 'pocketbase');
+  return resolvePocketBaseDirectory();
 }
 
 function generatePocketBaseCredentials() {

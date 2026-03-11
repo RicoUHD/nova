@@ -3,11 +3,12 @@
 set -eu
 
 data_dir="${DATA_DIR:-/app/data}"
+db_dir="${DB_DIR:-/app/db}"
 frontend_dir="${FRONTEND_DIR:-/app/html}"
 frontend_seed_dir="${FRONTEND_SEED_DIR:-/app/html-seed}"
 runtime_user="${RUNTIME_USER:-node}"
 pocketbase_bin="${POCKETBASE_BIN:-/app/pocketbase}"
-pocketbase_dir="${POCKETBASE_DIR:-$data_dir/pocketbase}"
+pocketbase_dir="${POCKETBASE_DIR:-$db_dir}"
 pocketbase_http="${POCKETBASE_HTTP:-0.0.0.0:8090}"
 
 # BusyBox `su -c` treats the first argument after the command string as $0,
