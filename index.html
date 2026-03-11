@@ -6,12 +6,9 @@
     <meta name="theme-color" content="#06b6d4">
     <link rel="manifest" href="manifest.json">
     <title>Nova</title>
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
     <link rel="modulepreload" href="assets/config.js">
     <link rel="modulepreload" href="assets/app.js">
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js">
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.9.0/firebase-database.js">
-    <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js">
+    <link rel="modulepreload" href="assets/pocketbase-compat.js">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 </head>
@@ -207,18 +204,25 @@
                         <button class="btn btn-primary btn-block" onclick="uploadChurchLogo()">Logo hochladen</button>
                     </div>
 
+                    <!-- TEMPORARY FIREBASE MIGRATION TOOL -->
+                    <div class="form-group" style="margin-bottom: 30px; border: 2px dashed var(--danger); border-radius: 12px; padding: 15px; background: var(--surface-alt);">
+                        <div style="font-weight:800; margin-bottom:10px; font-size: 1.05rem; color: var(--danger);">🔥 Firebase Daten-Migration (Temporär)</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:15px;">
+                            Laden Sie hier den JSON-Export Ihrer alten Firebase Realtime Database hoch. Die Daten werden automatisch in die neue PocketBase Datenbank migriert. <strong>Achtung: Existierende Daten könnten überschrieben werden!</strong>
+                        </div>
+                        <label class="form-label" for="firebase-migration-file" style="margin-bottom: 6px;">Firebase JSON Export (.json)</label>
+                        <input type="file" id="firebase-migration-file" class="form-input" accept=".json,application/json" style="margin-bottom: 10px;">
+                        <button class="btn btn-danger btn-block" onclick="uploadFirebaseMigration()">Daten migrieren</button>
+                    </div>
+
                     <!-- System Config -->
                     <div class="form-group" style="margin-bottom: 15px; border: 1px solid var(--border); border-radius: 12px; padding: 15px; background: var(--surface-alt);">
                         <div style="font-weight:800; margin-bottom:15px; font-size: 1.05rem;">System-Konfiguration</div>
 
                         <div class="form-group">
-                            <label class="form-label" for="super-admin-firebase-config">Firebase Config (JSON)</label>
-                            <textarea id="super-admin-firebase-config" class="form-input" rows="5" spellcheck="false" style="font-family: monospace; font-size: 0.85rem;"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label" for="super-admin-service-account">Firebase Service Account (JSON)</label>
-                            <textarea id="super-admin-service-account" class="form-input" rows="5" spellcheck="false" style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                            <label class="form-label" for="super-admin-app-name">Name der Anwendung</label>
+                            <input type="text" id="super-admin-app-name" class="form-input" placeholder="Nova">
+                            <div class="help-text">PocketBase wird automatisch im Docker-Container verwaltet. Hier können Sie nur den Anzeigenamen und optionale SMTP-Daten ändern.</div>
                         </div>
 
                         <div style="font-weight:800; margin-bottom:15px; margin-top: 25px; font-size: 1rem;">SMTP Server (Optional)</div>
