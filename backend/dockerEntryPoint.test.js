@@ -20,6 +20,7 @@ test('docker entrypoint populates an empty frontend directory from the seed copy
   const tempRoot = makeTempDir();
   try {
     const dataDir = path.join(tempRoot, 'data');
+    const dbDir = path.join(tempRoot, 'db');
     const frontendDir = path.join(tempRoot, 'html');
     const seedDir = path.join(tempRoot, 'html-seed');
 
@@ -32,6 +33,7 @@ test('docker entrypoint populates an empty frontend directory from the seed copy
       env: {
         ...process.env,
         DATA_DIR: dataDir,
+        DB_DIR: dbDir,
         FRONTEND_DIR: frontendDir,
         FRONTEND_SEED_DIR: seedDir
       },
@@ -50,6 +52,7 @@ test('docker entrypoint preserves an existing frontend directory', () => {
   const tempRoot = makeTempDir();
   try {
     const dataDir = path.join(tempRoot, 'data');
+    const dbDir = path.join(tempRoot, 'db');
     const frontendDir = path.join(tempRoot, 'html');
     const seedDir = path.join(tempRoot, 'html-seed');
 
@@ -62,6 +65,7 @@ test('docker entrypoint preserves an existing frontend directory', () => {
       env: {
         ...process.env,
         DATA_DIR: dataDir,
+        DB_DIR: dbDir,
         FRONTEND_DIR: frontendDir,
         FRONTEND_SEED_DIR: seedDir
       },
@@ -70,6 +74,35 @@ test('docker entrypoint preserves an existing frontend directory', () => {
 
     assert.equal(result.status, 0, formatFailure(result));
     assert.equal(fs.readFileSync(path.join(frontendDir, 'index.html'), 'utf8'), 'custom frontend');
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('docker entrypoint supports a dedicated PocketBase database directory', () => {
+  const tempRoot = makeTempDir();
+  try {
+    const dataDir = path.join(tempRoot, 'data');
+    const dbDir = path.join(tempRoot, 'db');
+    const frontendDir = path.join(tempRoot, 'html');
+    const seedDir = path.join(tempRoot, 'html-seed');
+
+    fs.mkdirSync(seedDir, { recursive: true });
+    fs.writeFileSync(path.join(seedDir, 'index.html'), '<!doctype html>');
+
+    const result = spawnSync(entrypoint, ['/bin/sh', '-c', 'exit 0'], {
+      env: {
+        ...process.env,
+        DATA_DIR: dataDir,
+        DB_DIR: dbDir,
+        FRONTEND_DIR: frontendDir,
+        FRONTEND_SEED_DIR: seedDir
+      },
+      encoding: 'utf8'
+    });
+
+    assert.equal(result.status, 0, formatFailure(result));
+    assert.equal(fs.existsSync(dbDir), true);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

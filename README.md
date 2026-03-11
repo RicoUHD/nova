@@ -24,7 +24,12 @@ Nova is distributed as an all-in-one Docker image. It includes the frontend, the
 
 ### Quick Start (Docker)
 
-To run Nova, pull the latest image and start a container. It is highly recommended to map the `/app/data` path to a persistent storage pool or volume, as this is where your configuration, uploaded receipts, and the custom logo will be saved.
+To run Nova, pull the latest image and start a container. Nova now keeps general app data and the PocketBase database in separate paths by default:
+
+- `/app/data` for configuration, uploads, and the custom logo
+- `/app/db` for the PocketBase database files
+
+That makes it easy to place `/app/db` on faster cache/SSD storage while keeping the rest on larger HDD-backed storage.
 
 ```bash
 docker pull ghcr.io/ricouhd/nova:latest
@@ -32,14 +37,15 @@ docker pull ghcr.io/ricouhd/nova:latest
 docker run -d \
   -p 3000:3000 \
   -v /path/to/your/storage:/app/data \
+  -v /path/to/your/cache:/app/db \
   --name nova-app \
   --restart unless-stopped \
   ghcr.io/ricouhd/nova:latest
 ```
 
-*Replace `/path/to/your/storage` with a directory on your host machine to ensure your data survives container restarts.*
+*Replace `/path/to/your/storage` and `/path/to/your/cache` with directories on your host machine to ensure your data survives container restarts.*
 
-> **Unraid / Permission Note:** Nova starts as root only long enough to prepare bind-mounted `/app/data` and `/app/html` directories for the bundled `node` user (UID 1000), then drops back to `node` before starting the app. If your storage backend blocks ownership changes, make sure every mapped host directory is writable by UID 1000, e.g. `chown -R 1000:1000 /path/to/your/storage /path/to/your/frontend`.
+> **Unraid / Permission Note:** Nova starts as root only long enough to prepare bind-mounted `/app/data`, `/app/db`, and `/app/html` directories for the bundled `node` user (UID 1000), then drops back to `node` before starting the app. If your storage backend blocks ownership changes, make sure every mapped host directory is writable by UID 1000, e.g. `chown -R 1000:1000 /path/to/your/storage /path/to/your/cache /path/to/your/frontend`.
 
 ### Optional: Frontend Volume Mapping
 
@@ -49,6 +55,7 @@ The frontend files are bundled directly in `/app/html` inside the container. If 
 docker run -d \
   -p 3000:3000 \
   -v /path/to/your/storage:/app/data \
+  -v /path/to/your/cache:/app/db \
   -v /path/to/your/frontend:/app/html \
   --name nova-app \
   --restart unless-stopped \
@@ -72,7 +79,7 @@ When you first access the application at `http://localhost:3000` (or your mapped
 2. **Optional SVG Logo:** You can upload a custom logo directly during the wizard.
 3. **SMTP Details (Optional):** Credentials for a mail server to send automated status and request notifications.
 
-PocketBase is provisioned automatically inside the container. Nova stores its runtime configuration in `/app/data/config.json`, the uploaded logo in `/app/data/church-logo.svg`, and the PocketBase database in `/app/data/pocketbase`.
+PocketBase is provisioned automatically inside the container. Nova stores its runtime configuration in `/app/data/config.json`, the uploaded logo in `/app/data/church-logo.svg`, and the PocketBase database in `/app/db` by default. If needed, you can override the database path with `DB_DIR` (or the more explicit `POCKETBASE_DIR`).
 </details>
 
 ## First User Setup (Super-Admin)
