@@ -19,6 +19,8 @@ const DEFAULT_SYSTEM_STATE = {
   superAdminUid: null
 };
 
+const MIGRATION_BATCH_SIZE = 10;
+
 const DEFAULT_COLLECTION_SPECS = [
   {
     name: 'people',
@@ -31,12 +33,83 @@ const DEFAULT_COLLECTION_SPECS = [
     indexes: [
       'CREATE UNIQUE INDEX idx_people_person_key ON people (personKey)',
       'CREATE INDEX idx_people_uid ON people (uid)',
-      'CREATE INDEX idx_people_name ON people (name)'
+      'CREATE INDEX idx_people_name ON people (name)',
+      'CREATE INDEX idx_people_status ON people (status)'
     ],
     fields: [
       { name: 'personKey', type: 'text', required: true },
       { name: 'uid', type: 'text' },
       { name: 'name', type: 'text', required: true },
+      { name: 'status', type: 'text' },
+      { name: 'memberSince', type: 'text' },
+      { name: 'originalMemberSince', type: 'text' },
+      { name: 'totalPaid', type: 'number' },
+      { name: 'data', type: 'json', required: true }
+    ]
+  },
+  {
+    name: 'payments',
+    type: 'base',
+    listRule: '@request.auth.admin = true',
+    viewRule: '@request.auth.admin = true',
+    createRule: '@request.auth.admin = true',
+    updateRule: '@request.auth.admin = true',
+    deleteRule: '@request.auth.admin = true',
+    indexes: [
+      'CREATE UNIQUE INDEX idx_payments_payment_key ON payments (paymentKey)',
+      'CREATE INDEX idx_payments_person_key ON payments (personKey)',
+      'CREATE INDEX idx_payments_date ON payments (date)'
+    ],
+    fields: [
+      { name: 'paymentKey', type: 'text', required: true },
+      { name: 'personKey', type: 'text', required: true },
+      { name: 'amount', type: 'number' },
+      { name: 'date', type: 'text' },
+      { name: 'description', type: 'text' },
+      { name: 'data', type: 'json', required: true }
+    ]
+  },
+  {
+    name: 'status_history',
+    type: 'base',
+    listRule: '@request.auth.admin = true',
+    viewRule: '@request.auth.admin = true',
+    createRule: '@request.auth.admin = true',
+    updateRule: '@request.auth.admin = true',
+    deleteRule: '@request.auth.admin = true',
+    indexes: [
+      'CREATE UNIQUE INDEX idx_status_history_key ON status_history (historyKey)',
+      'CREATE INDEX idx_status_history_person_key ON status_history (personKey)',
+      'CREATE INDEX idx_status_history_start_date ON status_history (startDate)'
+    ],
+    fields: [
+      { name: 'historyKey', type: 'text', required: true },
+      { name: 'personKey', type: 'text', required: true },
+      { name: 'status', type: 'text', required: true },
+      { name: 'startDate', type: 'text', required: true },
+      { name: 'endDate', type: 'text' },
+      { name: 'data', type: 'json', required: true }
+    ]
+  },
+  {
+    name: 'expenses',
+    type: 'base',
+    listRule: '@request.auth.admin = true',
+    viewRule: '@request.auth.admin = true',
+    createRule: '@request.auth.admin = true',
+    updateRule: '@request.auth.admin = true',
+    deleteRule: '@request.auth.admin = true',
+    indexes: [
+      'CREATE UNIQUE INDEX idx_expenses_expense_key ON expenses (expenseKey)',
+      'CREATE INDEX idx_expenses_date ON expenses (date)'
+    ],
+    fields: [
+      { name: 'expenseKey', type: 'text', required: true },
+      { name: 'amount', type: 'number' },
+      { name: 'date', type: 'text' },
+      { name: 'issuer', type: 'text' },
+      { name: 'description', type: 'text' },
+      { name: 'receipt', type: 'text' },
       { name: 'data', type: 'json', required: true }
     ]
   },
@@ -391,12 +464,318 @@ async function ensureStateDefaults(appConfig) {
   }
 }
 
+function normalizeRecordListInput(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'object') return Object.values(value).filter(Boolean);
+  return [];
+}
+
+function toOptionalText(value) {
+  if (value === undefined || value === null || value === '') return '';
+  return String(value);
+}
+
+function toFiniteNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function calculateTotalPaid(payments) {
+  return normalizeRecordListInput(payments).reduce((sum, payment) => {
+    const amount = Number(payment?.amount);
+    return Number.isFinite(amount) ? sum + amount : sum;
+  }, 0);
+}
+
+function stableSerialize(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableSerialize(entry)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function buildStableChildKey(prefix, ownerKey, itemKey, index, value) {
+  const stableSource = itemKey !== undefined && itemKey !== null && itemKey !== ''
+    ? String(itemKey)
+    : stableSerialize([ownerKey, index, value]);
+  return crypto.createHash('sha256').update(`${prefix}:${ownerKey}:${stableSource}`).digest('hex').slice(0, 32);
+}
+
+async function runInBatches(items, batchSize, worker) {
+  for (let index = 0; index < items.length; index += batchSize) {
+    await Promise.all(items.slice(index, index + batchSize).map((item) => worker(item)));
+  }
+}
+
+function stripNormalizedPersonData(value) {
+  if (!value || typeof value !== 'object') return null;
+  const data = { ...value };
+  delete data.payments;
+  delete data.statusHistory;
+  data.totalPaid = calculateTotalPaid(value.payments);
+  return data;
+}
+
+function buildPaymentRecordPayload(personKey, payment, index = 0) {
+  const normalized = payment && typeof payment === 'object' ? { ...payment } : {};
+  return {
+    paymentKey: buildStableChildKey('payment', personKey, normalized.id, index, normalized),
+    personKey: String(personKey),
+    amount: toFiniteNumber(normalized.amount),
+    date: toOptionalText(normalized.date),
+    description: toOptionalText(normalized.description),
+    data: normalized
+  };
+}
+
+function buildStatusHistoryRecordPayload(personKey, entry, index = 0) {
+  const normalized = entry && typeof entry === 'object' ? { ...entry } : {};
+  return {
+    historyKey: buildStableChildKey('status', personKey, normalized.id, index, normalized),
+    personKey: String(personKey),
+    status: toOptionalText(normalized.status),
+    startDate: toOptionalText(normalized.startDate),
+    endDate: toOptionalText(normalized.endDate),
+    data: normalized
+  };
+}
+
+function buildExpenseRecordPayload(expense, index = 0) {
+  const normalized = expense && typeof expense === 'object' ? { ...expense } : {};
+  return {
+    expenseKey: buildStableChildKey('expense', 'global', normalized.id, index, normalized),
+    amount: toFiniteNumber(normalized.amount),
+    date: toOptionalText(normalized.date),
+    issuer: toOptionalText(normalized.issuer),
+    description: toOptionalText(normalized.description),
+    receipt: toOptionalText(normalized.receipt),
+    data: normalized
+  };
+}
+
+function groupRecordsBy(records, keyField) {
+  return records.reduce((acc, record) => {
+    const key = record?.[keyField];
+    if (!key) return acc;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(record);
+    return acc;
+  }, {});
+}
+
+function mergeChildData(ownerKey, existingRecords, legacyItems, payloadBuilder, keyField) {
+  const merged = new Map();
+
+  for (const record of existingRecords) {
+    const key = record?.[keyField];
+    if (key && record?.data) {
+      merged.set(key, record.data);
+    }
+  }
+
+  normalizeRecordListInput(legacyItems).forEach((item, index) => {
+    const payload = payloadBuilder(ownerKey, item, index);
+    if (!merged.has(payload[keyField])) {
+      merged.set(payload[keyField], item);
+    }
+  });
+
+  return [...merged.values()];
+}
+
+function mergeExpenseData(existingRecords, legacyItems) {
+  const merged = new Map();
+
+  for (const record of existingRecords) {
+    if (record?.expenseKey && record?.data) {
+      merged.set(record.expenseKey, record.data);
+    }
+  }
+
+  normalizeRecordListInput(legacyItems).forEach((expense, index) => {
+    const payload = buildExpenseRecordPayload(expense, index);
+    if (!merged.has(payload.expenseKey)) {
+      merged.set(payload.expenseKey, expense);
+    }
+  });
+
+  return [...merged.values()];
+}
+
+function getChildRecordIdentity(record) {
+  return toOptionalText(
+    record?.data?.id
+    || record?.paymentKey
+    || record?.historyKey
+    || record?.expenseKey
+    || stableSerialize(record?.data || record || {})
+  );
+}
+
+function toSortedChildValues(records, sortField) {
+  return [...records]
+    .sort((left, right) => {
+      const leftValue = toOptionalText(left?.[sortField]);
+      const rightValue = toOptionalText(right?.[sortField]);
+      if (leftValue === rightValue) {
+        return getChildRecordIdentity(left).localeCompare(getChildRecordIdentity(right));
+      }
+      return leftValue.localeCompare(rightValue);
+    })
+    .map((record) => record.data)
+    .filter(Boolean);
+}
+
+function hydratePersonRecord(record, payments = [], statusHistory = []) {
+  if (!record) return null;
+  const data = record.data && typeof record.data === 'object' ? { ...record.data } : {};
+  const normalizedPayments = toSortedChildValues(payments, 'date');
+  const normalizedStatusHistory = toSortedChildValues(statusHistory, 'startDate');
+  data.id = data.id || record.personKey;
+  data.uid = data.uid || record.uid || '';
+  data.name = data.name || record.name || '';
+  data.status = data.status || record.status || '';
+  data.memberSince = data.memberSince || record.memberSince || '';
+  data.originalMemberSince = data.originalMemberSince || record.originalMemberSince || data.memberSince || '';
+  data.payments = normalizedPayments;
+  data.statusHistory = normalizedStatusHistory;
+  data.totalPaid = calculateTotalPaid(normalizedPayments);
+  return data;
+}
+
+async function syncCollectionRecords(collectionName, keyField, existingRecords, nextPayloads, appConfig) {
+  const existingByKey = new Map(existingRecords.map((record) => [record[keyField], record]));
+  const nextKeys = new Set();
+
+  for (const payload of nextPayloads) {
+    const key = payload[keyField];
+    nextKeys.add(key);
+    const existing = existingByKey.get(key);
+    if (existing) {
+      await updateRecord(collectionName, existing.id, payload, appConfig);
+    } else {
+      await createRecord(collectionName, payload, appConfig);
+    }
+  }
+
+  for (const record of existingRecords) {
+    if (!nextKeys.has(record[keyField])) {
+      await deleteRecord(collectionName, record.id, appConfig);
+    }
+  }
+}
+
+async function listChildRecordsForPeople(collectionName, personKeys, appConfig) {
+  if (!personKeys.length) return [];
+  if (personKeys.length === 1) {
+    return listAllRecords(collectionName, pbFilterEquals('personKey', personKeys[0]), appConfig);
+  }
+  const allowedKeys = new Set(personKeys.map(String));
+  const records = await listAllRecords(collectionName, '', appConfig);
+  return records.filter((record) => allowedKeys.has(String(record.personKey)));
+}
+
+async function syncPeopleChildRecords(appConfig, personKey, value) {
+  const normalizedPayments = normalizeRecordListInput(value?.payments);
+  const normalizedStatusHistory = normalizeRecordListInput(value?.statusHistory);
+  const [existingPayments, existingStatusHistory] = await Promise.all([
+    listAllRecords('payments', pbFilterEquals('personKey', personKey), appConfig),
+    listAllRecords('status_history', pbFilterEquals('personKey', personKey), appConfig)
+  ]);
+
+  await syncCollectionRecords(
+    'payments',
+    'paymentKey',
+    existingPayments,
+    normalizedPayments.map((payment, index) => buildPaymentRecordPayload(personKey, payment, index)),
+    appConfig
+  );
+  await syncCollectionRecords(
+    'status_history',
+    'historyKey',
+    existingStatusHistory,
+    normalizedStatusHistory.map((entry, index) => buildStatusHistoryRecordPayload(personKey, entry, index)),
+    appConfig
+  );
+}
+
+async function migrateLegacyPeopleData(appConfig) {
+  const records = await listAllRecords('people', '', appConfig);
+  const [allPayments, allStatusHistory] = await Promise.all([
+    listAllRecords('payments', '', appConfig),
+    listAllRecords('status_history', '', appConfig)
+  ]);
+  const paymentsByPersonKey = groupRecordsBy(allPayments, 'personKey');
+  const historyByPersonKey = groupRecordsBy(allStatusHistory, 'personKey');
+  await runInBatches(records, MIGRATION_BATCH_SIZE, async (record) => {
+    const value = record?.data && typeof record.data === 'object' ? record.data : {};
+    const existingPayments = paymentsByPersonKey[record.personKey] || [];
+    const existingStatusHistory = historyByPersonKey[record.personKey] || [];
+    const mergedPayments = mergeChildData(
+      record.personKey,
+      existingPayments,
+      value.payments,
+      buildPaymentRecordPayload,
+      'paymentKey'
+    );
+    const mergedStatusHistory = mergeChildData(
+      record.personKey,
+      existingStatusHistory,
+      value.statusHistory,
+      buildStatusHistoryRecordPayload,
+      'historyKey'
+    );
+    const nextValue = {
+      ...value,
+      payments: mergedPayments,
+      statusHistory: mergedStatusHistory
+    };
+    const hasLegacyArrays = (Array.isArray(value.payments) && value.payments.length > 0)
+      || (Array.isArray(value.statusHistory) && value.statusHistory.length > 0);
+    const totalPaid = calculateTotalPaid(nextValue.payments);
+    const recordTotalPaid = toFiniteNumber(record.totalPaid);
+    const needsScalarRefresh = record.status !== toOptionalText(nextValue.status)
+      || record.memberSince !== toOptionalText(nextValue.memberSince)
+      || record.originalMemberSince !== toOptionalText(nextValue.originalMemberSince || nextValue.memberSince)
+      || recordTotalPaid !== totalPaid;
+
+    if (hasLegacyArrays || needsScalarRefresh) {
+      await upsertPeopleRecord(appConfig, record.personKey, nextValue);
+    }
+  });
+}
+
+async function migrateLegacyExpensesData(appConfig) {
+  const stateRecord = await getStateRecord(appConfig, 'expenses');
+  const legacyExpenses = normalizeRecordListInput(stateRecord?.value);
+  if (!legacyExpenses.length) return;
+
+  const existingExpenses = await listAllRecords('expenses', '', appConfig);
+  const mergedExpenses = mergeExpenseData(existingExpenses, legacyExpenses);
+  await syncCollectionRecords(
+    'expenses',
+    'expenseKey',
+    existingExpenses,
+    mergedExpenses.map((expense, index) => buildExpenseRecordPayload(expense, index)),
+    appConfig
+  );
+
+  await upsertStateValue(appConfig, 'expenses', {});
+}
+
 async function ensurePocketBaseSchema(appConfig) {
   await ensureUsersCollection(appConfig);
   for (const spec of DEFAULT_COLLECTION_SPECS) {
     await ensureCollection(appConfig, spec);
   }
   await ensureStateDefaults(appConfig);
+  await migrateLegacyPeopleData(appConfig);
+  await migrateLegacyExpensesData(appConfig);
 }
 
 async function verifyUserToken(token) {
@@ -486,9 +865,13 @@ async function updateUserRecord(appConfig, uid, body) {
 function buildPersonRecordPayload(personKey, value) {
   return {
     personKey: String(personKey),
-    uid: value?.uid ? String(value.uid) : '',
-    name: value?.name ? String(value.name) : '',
-    data: value || null
+    uid: toOptionalText(value?.uid),
+    name: toOptionalText(value?.name),
+    status: toOptionalText(value?.status),
+    memberSince: toOptionalText(value?.memberSince),
+    originalMemberSince: toOptionalText(value?.originalMemberSince || value?.memberSince),
+    totalPaid: calculateTotalPaid(value?.payments),
+    data: stripNormalizedPersonData(value)
   };
 }
 
@@ -506,7 +889,16 @@ function buildRequestRecordPayload(requestKey, value) {
 }
 
 async function getPeopleRecord(appConfig, personKey) {
-  return getFirstRecord('people', pbFilterEquals('personKey', personKey), appConfig);
+  const record = await getFirstRecord('people', pbFilterEquals('personKey', personKey), appConfig);
+  if (!record) return null;
+  const [payments, statusHistory] = await Promise.all([
+    listAllRecords('payments', pbFilterEquals('personKey', personKey), appConfig),
+    listAllRecords('status_history', pbFilterEquals('personKey', personKey), appConfig)
+  ]);
+  return {
+    ...record,
+    data: hydratePersonRecord(record, payments, statusHistory)
+  };
 }
 
 async function listPeopleRecords(appConfig, query = {}) {
@@ -516,7 +908,19 @@ async function listPeopleRecords(appConfig, query = {}) {
   } else if (query.orderByChild === 'name' && query.equalTo !== undefined) {
     filter = pbFilterEquals('name', query.equalTo);
   }
-  return listAllRecords('people', filter, appConfig);
+  const people = await listAllRecords('people', filter, appConfig);
+  const personKeys = people.map((record) => record.personKey);
+  const [payments, statusHistory] = await Promise.all([
+    listChildRecordsForPeople('payments', personKeys, appConfig),
+    listChildRecordsForPeople('status_history', personKeys, appConfig)
+  ]);
+  const paymentsByPersonKey = groupRecordsBy(payments, 'personKey');
+  const historyByPersonKey = groupRecordsBy(statusHistory, 'personKey');
+
+  return people.map((record) => ({
+    ...record,
+    data: hydratePersonRecord(record, paymentsByPersonKey[record.personKey] || [], historyByPersonKey[record.personKey] || [])
+  }));
 }
 
 async function upsertPeopleRecord(appConfig, personKey, value, expectedUpdated = null) {
@@ -527,21 +931,49 @@ async function upsertPeopleRecord(appConfig, personKey, value, expectedUpdated =
       error.status = 409;
       throw error;
     }
-    return updateRecord('people', existing.id, buildPersonRecordPayload(personKey, value), appConfig);
+    await updateRecord('people', existing.id, buildPersonRecordPayload(personKey, value), appConfig);
+    await syncPeopleChildRecords(appConfig, personKey, value);
+    return getPeopleRecord(appConfig, personKey);
   }
   if (expectedUpdated) {
     const error = new Error('Conflict');
     error.status = 409;
     throw error;
   }
-  return createRecord('people', buildPersonRecordPayload(personKey, value), appConfig);
+  await createRecord('people', buildPersonRecordPayload(personKey, value), appConfig);
+  await syncPeopleChildRecords(appConfig, personKey, value);
+  return getPeopleRecord(appConfig, personKey);
 }
 
 async function removePeopleRecord(appConfig, personKey) {
   const existing = await getPeopleRecord(appConfig, personKey);
   if (existing) {
+    const [payments, statusHistory] = await Promise.all([
+      listAllRecords('payments', pbFilterEquals('personKey', personKey), appConfig),
+      listAllRecords('status_history', pbFilterEquals('personKey', personKey), appConfig)
+    ]);
+    await Promise.all([
+      ...payments.map((payment) => deleteRecord('payments', payment.id, appConfig)),
+      ...statusHistory.map((entry) => deleteRecord('status_history', entry.id, appConfig))
+    ]);
     await deleteRecord('people', existing.id, appConfig);
   }
+}
+
+async function listExpenseRecords(appConfig) {
+  return listAllRecords('expenses', '', appConfig);
+}
+
+async function syncExpenseRecords(appConfig, value) {
+  const normalizedExpenses = normalizeRecordListInput(value);
+  const existingExpenses = await listAllRecords('expenses', '', appConfig);
+  await syncCollectionRecords(
+    'expenses',
+    'expenseKey',
+    existingExpenses,
+    normalizedExpenses.map((expense, index) => buildExpenseRecordPayload(expense, index)),
+    appConfig
+  );
 }
 
 async function getRequestRecord(appConfig, requestKey) {
@@ -572,6 +1004,13 @@ module.exports = {
   decodeTokenPayload,
   toPublicUser,
   sanitizeSelfUserWrite,
+  normalizeRecordListInput,
+  stripNormalizedPersonData,
+  buildPersonRecordPayload,
+  buildPaymentRecordPayload,
+  buildStatusHistoryRecordPayload,
+  buildExpenseRecordPayload,
+  hydratePersonRecord,
   getPocketBaseBaseUrl,
   getPocketBaseBinaryPath,
   getPocketBaseDataDir,
@@ -591,6 +1030,8 @@ module.exports = {
   getPeopleRecord,
   upsertPeopleRecord,
   removePeopleRecord,
+  listExpenseRecords,
+  syncExpenseRecords,
   listRequestRecords,
   getRequestRecord,
   upsertRequestRecord
