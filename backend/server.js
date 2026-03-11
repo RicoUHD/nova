@@ -925,7 +925,15 @@ app.post('/api/admin/migrate-firebase', verifyToken, verifySuperAdmin, (req, res
 
     try {
       const fileContent = req.file.buffer.toString('utf8');
-      const data = JSON.parse(fileContent);
+      let data = JSON.parse(fileContent);
+
+      // Firebase RTDB JSON exports often wrap the entire database inside a single parent node (e.g. project ID).
+      // If there's exactly one root key and it's not one of our known collections, unwrap it.
+      const rootKeys = Object.keys(data);
+      const expectedKeys = ['settings', 'system', 'donations', 'expenses', 'people', 'requests', 'users'];
+      if (rootKeys.length === 1 && !expectedKeys.includes(rootKeys[0])) {
+        data = data[rootKeys[0]];
+      }
 
       // Migrate state root nodes
       const stateKeys = ['settings', 'system', 'donations', 'expenses'];
