@@ -550,6 +550,45 @@ function groupRecordsBy(records, keyField) {
   }, {});
 }
 
+function mergeChildData(ownerKey, existingRecords, legacyItems, payloadBuilder, keyField) {
+  const merged = new Map();
+
+  for (const record of existingRecords) {
+    const key = record?.[keyField];
+    if (key && record?.data) {
+      merged.set(key, record.data);
+    }
+  }
+
+  normalizeRecordListInput(legacyItems).forEach((item, index) => {
+    const payload = payloadBuilder(ownerKey, item, index);
+    if (!merged.has(payload[keyField])) {
+      merged.set(payload[keyField], item);
+    }
+  });
+
+  return [...merged.values()];
+}
+
+function mergeExpenseData(existingRecords, legacyItems) {
+  const merged = new Map();
+
+  for (const record of existingRecords) {
+    if (record?.expenseKey && record?.data) {
+      merged.set(record.expenseKey, record.data);
+    }
+  }
+
+  normalizeRecordListInput(legacyItems).forEach((expense, index) => {
+    const payload = buildExpenseRecordPayload(expense, index);
+    if (!merged.has(payload.expenseKey)) {
+      merged.set(payload.expenseKey, expense);
+    }
+  });
+
+  return [...merged.values()];
+}
+
 function toSortedChildValues(records, sortField) {
   return [...records]
     .sort((left, right) => {
@@ -644,10 +683,24 @@ async function migrateLegacyPeopleData(appConfig) {
     const value = record?.data && typeof record.data === 'object' ? record.data : {};
     const existingPayments = await listAllRecords('payments', pbFilterEquals('personKey', record.personKey), appConfig);
     const existingStatusHistory = await listAllRecords('status_history', pbFilterEquals('personKey', record.personKey), appConfig);
+    const mergedPayments = mergeChildData(
+      record.personKey,
+      existingPayments,
+      value.payments,
+      buildPaymentRecordPayload,
+      'paymentKey'
+    );
+    const mergedStatusHistory = mergeChildData(
+      record.personKey,
+      existingStatusHistory,
+      value.statusHistory,
+      buildStatusHistoryRecordPayload,
+      'historyKey'
+    );
     const nextValue = {
       ...value,
-      payments: existingPayments.length ? existingPayments.map((entry) => entry.data).filter(Boolean) : normalizeRecordListInput(value.payments),
-      statusHistory: existingStatusHistory.length ? existingStatusHistory.map((entry) => entry.data).filter(Boolean) : normalizeRecordListInput(value.statusHistory)
+      payments: mergedPayments,
+      statusHistory: mergedStatusHistory
     };
     const hasLegacyArrays = Array.isArray(value.payments) || Array.isArray(value.statusHistory);
     const totalPaid = calculateTotalPaid(nextValue.payments);
@@ -668,15 +721,14 @@ async function migrateLegacyExpensesData(appConfig) {
   if (!legacyExpenses.length) return;
 
   const existingExpenses = await listAllRecords('expenses', '', appConfig);
-  if (!existingExpenses.length) {
-    await syncCollectionRecords(
-      'expenses',
-      'expenseKey',
-      existingExpenses,
-      legacyExpenses.map((expense, index) => buildExpenseRecordPayload(expense, index)),
-      appConfig
-    );
-  }
+  const mergedExpenses = mergeExpenseData(existingExpenses, legacyExpenses);
+  await syncCollectionRecords(
+    'expenses',
+    'expenseKey',
+    existingExpenses,
+    mergedExpenses.map((expense, index) => buildExpenseRecordPayload(expense, index)),
+    appConfig
+  );
 
   await upsertStateValue(appConfig, 'expenses', {});
 }
