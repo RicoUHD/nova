@@ -1,9 +1,7 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-app.js";
-import { getDatabase, ref, set, get, child, onValue, update, query, orderByChild, equalTo, runTransaction, remove } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-database.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/11.9.0/firebase-auth.js";
+import { initializeApp, getDatabase, ref, set, get, child, update, query, orderByChild, equalTo, runTransaction, remove, getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "./pocketbase-compat.js";
 import { config } from "./config.js";
 
-const app = initializeApp(config.firebaseConfig);
+const app = initializeApp(config);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
@@ -81,7 +79,7 @@ function setButtonLoading(btnId, isLoading, loadingText = "Laden...") {
     }
 }
 
-// Helper: Firebase can return lists as objects {0:.., 1:..}, this fixes that.
+// Helper: the backend can return lists as objects {0:.., 1:..}, this fixes that.
 function safeList(val) {
     if (!val) return [];
     if (Array.isArray(val)) return val;
@@ -936,7 +934,7 @@ async function loadData() {
                     p.uid = currentUser.uid;
                     // We need the key to update. Assuming 'id' is the key or we need to find it.
                     // In this app structure, people is an array or object.
-                    // If it's an object from Firebase, we need the key.
+                    // If it's an object keyed by record id, we need the key.
                     // safeList loses keys if not careful, but here we just need to update the object in memory for now.
                     // To persist the link, we would need to know the key.
                     // Let's try to find the key from the snapshot if possible.
@@ -2594,8 +2592,7 @@ async function loadAdvancedSystemConfig() {
         }
         const data = await response.json();
         advancedConfigAppName = data.appName || null;
-        document.getElementById('super-admin-firebase-config').value = JSON.stringify(data.firebaseConfig || {}, null, 2);
-        document.getElementById('super-admin-service-account').value = JSON.stringify(data.serviceAccount || {}, null, 2);
+        document.getElementById('super-admin-app-name').value = data.appName || '';
         document.getElementById('super-admin-smtp-host').value = data.smtp?.host || '';
         document.getElementById('super-admin-smtp-port').value = data.smtp?.port || '';
         document.getElementById('super-admin-smtp-secure').checked = !!data.smtp?.secure;
@@ -2611,15 +2608,13 @@ async function loadAdvancedSystemConfig() {
 window.saveAdvancedSystemConfig = async () => {
     if (!isSuperAdminUser()) return;
     try {
-        const appName = advancedConfigAppName || config.appName;
+        const appName = document.getElementById('super-admin-app-name').value.trim() || advancedConfigAppName || config.appName;
         if (!appName) {
             throw new Error('App-Name konnte nicht ermittelt werden. Dies kann auf fehlende Konfigurationsdaten hinweisen. Bitte Seite neu laden.');
         }
 
         const payload = {
             appName,
-            firebaseConfig: JSON.parse(document.getElementById('super-admin-firebase-config').value || '{}'),
-            serviceAccount: JSON.parse(document.getElementById('super-admin-service-account').value || '{}'),
             smtp: null
         };
 
@@ -2646,6 +2641,7 @@ window.saveAdvancedSystemConfig = async () => {
         if (!response.ok) {
             throw new Error(await response.text());
         }
+        advancedConfigAppName = appName;
         showToast('System-Konfiguration gespeichert');
     } catch (err) {
         console.error('Fehler beim Speichern der erweiterten Konfiguration:', err);
@@ -2961,7 +2957,7 @@ window.attemptRegister = async () => {
             return;
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, email, p1);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, p1, { inviteCode: code });
         const user = userCredential.user;
         // Persist basic user profile
         await set(ref(db, 'users/' + user.uid), {
@@ -3182,7 +3178,7 @@ window.uploadReceipt = async function(file, transactionName, transactionDate) {
     const user = auth.currentUser;
     if (!user) throw new Error('Not authenticated');
     
-    // Grab the active user's Firebase token to prove their identity
+    // Grab the active user's auth token to prove their identity
     const token = await user.getIdToken();
     const formData = new FormData();
 
