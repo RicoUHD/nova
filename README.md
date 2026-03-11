@@ -88,10 +88,7 @@ The super-admin can then:
 - promote/demote other users to regular admins (supervisors),
 - edit recorded payments afterwards,
 - update `assets/church-logo.svg` (church icon),
-- update Firebase and SMTP configuration directly from the advanced settings UI,
-- optionally configure and run the removable Firebase RTDB → PocketBase migration add-on from the same advanced settings UI.
-
-The migration add-on stores optional PocketBase connection settings plus a JSON mapping definition in the existing system config. By default it assumes PocketBase collections with the same names as the Firebase roots and uses a `firebaseKey` field plus a `data` JSON field for wrapped payloads. You can adjust the mapping JSON before running a dry-run or the actual migration.
+- update Firebase and SMTP configuration directly from the advanced settings UI.
 
 <details>
 <summary><b>Firebase Database Rules</b></summary>
