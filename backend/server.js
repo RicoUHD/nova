@@ -302,7 +302,7 @@ function setAuthCookie(res, token) {
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
-    'Max-Age=2592000'
+    'Max-Age=7,948,800'
   ];
   res.setHeader('Set-Cookie', attributes.join('; '));
 }
