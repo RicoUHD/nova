@@ -2686,7 +2686,14 @@ window.saveAdvancedSystemConfig = async () => {
             body: JSON.stringify(payload)
         });
         if (!response.ok) {
-            throw new Error(await response.text());
+            let errMsg;
+            try {
+                const errData = await response.json();
+                errMsg = errData.error || JSON.stringify(errData);
+            } catch {
+                errMsg = await response.text();
+            }
+            throw new Error(errMsg);
         }
         advancedConfigAppName = appName;
         showToast('System-Konfiguration gespeichert');

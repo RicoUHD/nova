@@ -895,7 +895,8 @@ app.put('/api/admin/system-config', verifyToken, verifySuperAdmin, async (req, r
     };
 
     fs.writeFileSync(configFile, JSON.stringify(newConfig, null, 2), 'utf8');
-    await setRuntimeConfig(newConfig);
+    appConfig = newConfig;
+    transporter = buildSmtpTransport(newConfig.smtp || null);
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to update system config:', error);
