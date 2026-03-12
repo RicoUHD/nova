@@ -301,7 +301,8 @@ function setAuthCookie(res, token) {
     `${authCookieName}=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax'
+    'SameSite=Lax',
+    'Max-Age=7,948,800'
   ];
   res.setHeader('Set-Cookie', attributes.join('; '));
 }
