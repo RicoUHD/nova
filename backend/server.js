@@ -10,6 +10,15 @@ const { selectChurchLogoFilePath } = require('./logoStorage');
 const { resolveDataDirectory, resolveFrontendDirectory } = require('./pathConfig');
 const { resolveTrustProxySetting } = require('./trustProxy');
 const {
+  checkAndExecuteStandingOrders,
+  preprocessPerson,
+  calculatePaymentStatus,
+  calculateTimeRemaining,
+  calculateOverdueAmount,
+  getCurrentStatus,
+  getTodayStr
+} = require('./personLogic');
+const {
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_STATE,
   generatePocketBaseCredentials,
@@ -61,6 +70,34 @@ let transporter = null;
 let runtimeReady = Promise.resolve();
 const authCookieName = 'nova_auth';
 
+let standingOrdersInterval = null;
+
+async function runDailyStandingOrders() {
+  if (setupMode || !appConfig) return;
+
+  try {
+    const people = await listPeopleRecords(appConfig);
+    const updates = [];
+
+    for (const record of people) {
+      if (!record.data) continue;
+      const result = checkAndExecuteStandingOrders(record.data);
+      if (result) {
+        const newTotal = result.payments.reduce((acc, p) => acc + parseFloat(p.amount), 0);
+        const updatedData = { ...record.data, ...result, totalPaid: newTotal };
+        updates.push(upsertPeopleRecord(appConfig, record.personKey, updatedData, record.updated));
+      }
+    }
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+      console.log(`Executed standing orders for ${updates.length} people.`);
+    }
+  } catch (error) {
+    console.error('Error running daily standing orders:', error);
+  }
+}
+
 function buildSmtpTransport(smtp) {
   if (!smtp) return null;
   return nodemailer.createTransport({
@@ -92,6 +129,12 @@ async function initializeRuntime(config) {
   setupMode = false;
   transporter = buildSmtpTransport(config.smtp || null);
   console.log('Configuration loaded successfully. Setup mode: false');
+
+  if (standingOrdersInterval) {
+    clearInterval(standingOrdersInterval);
+  }
+  setTimeout(runDailyStandingOrders, 5000);
+  standingOrdersInterval = setInterval(runDailyStandingOrders, 60 * 60 * 1000); // Check every hour
 }
 
 function setRuntimeConfig(config) {
@@ -569,6 +612,9 @@ async function readLogicalPath(targetPath, query, user) {
   }
 
   if (root === 'people') {
+    const settings = await getStateValue(appConfig, 'settings', DEFAULT_SETTINGS);
+    const todayStr = getTodayStr();
+
     if (id) {
       const record = await getPeopleRecord(appConfig, id);
       const value = record?.data || null;
@@ -577,6 +623,17 @@ async function readLogicalPath(targetPath, query, user) {
         error.status = 403;
         throw error;
       }
+      if (value) {
+        const p = preprocessPerson(value);
+        const pStatus = calculatePaymentStatus(p, settings);
+        value.computed = {
+          paidUntil: pStatus.paidUntil ? pStatus.paidUntil.toISOString() : null,
+          remainingCredit: pStatus.remainingCredit,
+          statusMeta: calculateTimeRemaining(p, pStatus.paidUntil, todayStr),
+          overdueAmount: calculateOverdueAmount(p, pStatus.paidUntil, pStatus.remainingCredit, settings, todayStr),
+          currentStatus: getCurrentStatus(p)
+        };
+      }
       return { value, version: record?.updated || null };
     }
 
@@ -584,8 +641,20 @@ async function readLogicalPath(targetPath, query, user) {
     if (!user.admin) {
       people = people.filter((record) => record.uid === user.uid || isOwnFullNameMatch(user, record.name));
     }
+
     return {
-      value: objectFromRecords(people, 'personKey', (record) => record.data),
+      value: objectFromRecords(people, 'personKey', (record) => {
+        const p = preprocessPerson(record.data);
+        const pStatus = calculatePaymentStatus(p, settings);
+        p.computed = {
+          paidUntil: pStatus.paidUntil ? pStatus.paidUntil.toISOString() : null,
+          remainingCredit: pStatus.remainingCredit,
+          statusMeta: calculateTimeRemaining(p, pStatus.paidUntil, todayStr),
+          overdueAmount: calculateOverdueAmount(p, pStatus.paidUntil, pStatus.remainingCredit, settings, todayStr),
+          currentStatus: getCurrentStatus(p)
+        };
+        return p;
+      }),
       version: null
     };
   }
@@ -703,7 +772,7 @@ async function writeLogicalPath(targetPath, value, user, method = 'set') {
     const existingValue = existing?.data || null;
     if (!user.admin) {
       const requestedUid = value && typeof value === 'object' ? value.uid : undefined;
-      const onlyUidUpdate = value && typeof value === 'object' && Object.keys(value).every((key) => key === 'uid');
+      const onlyUidUpdate = value && typeof value === 'object' && Object.keys(value).every((key) => key === 'uid' || key === 'computed');
       const isAllowedLink = existingValue && onlyUidUpdate && requestedUid === user.uid && (!existingValue.uid || existingValue.uid === user.uid) && isOwnFullNameMatch(user, existingValue.name);
       if (!isAllowedLink) {
         throw Object.assign(new Error('Admin access required'), { status: 403 });
@@ -712,6 +781,11 @@ async function writeLogicalPath(targetPath, value, user, method = 'set') {
     const nextValue = method === 'patch' && existingValue && value && typeof value === 'object'
       ? { ...existingValue, ...value }
       : value;
+
+    if (nextValue && typeof nextValue === 'object') {
+        delete nextValue.computed;
+    }
+
     await upsertPeopleRecord(appConfig, id, nextValue);
     return;
   }
@@ -758,6 +832,205 @@ async function verifyOptionalUser(req) {
     return null;
   }
 }
+
+app.get('/api/stats', dbRateLimit, verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const [people, donationsData, expensesData, settingsData] = await Promise.all([
+      listPeopleRecords(appConfig),
+      getStateRecord(appConfig, 'donations'),
+      listExpenseRecords(appConfig),
+      getStateValue(appConfig, 'settings', DEFAULT_SETTINGS)
+    ]);
+
+    const donations = donationsData?.value ? Object.values(donationsData.value) : [];
+    const expenses = expensesData.map(r => r.data);
+    const settings = settingsData || DEFAULT_SETTINGS;
+
+    let periodInc = 0, periodExp = 0;
+    let totalInc = 0, totalExp = 0;
+    const startStr = settings.reportStartDate || '';
+
+    people.forEach(p => {
+      const pData = p.data;
+      const pTotal = parseFloat(pData.totalPaid || 0);
+      totalInc += pTotal;
+
+      if (startStr) {
+        (pData.payments || []).forEach(pay => {
+          if (pay.date >= startStr) periodInc += parseFloat(pay.amount || 0);
+        });
+      } else {
+        periodInc += pTotal;
+      }
+    });
+
+    donations.forEach(d => {
+      const amount = parseFloat(d.amount || 0);
+      totalInc += amount;
+      if (!startStr || d.date >= startStr) periodInc += amount;
+    });
+
+    expenses.forEach(e => {
+      const amount = parseFloat(e.amount || 0);
+      totalExp += amount;
+      if (!startStr || e.date >= startStr) periodExp += amount;
+    });
+
+    const totalBalance = totalInc - totalExp;
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const ninetyDaysAgo = new Date(today);
+    ninetyDaysAgo.setDate(today.getDate() - 90);
+
+    const cutoffY = ninetyDaysAgo.getFullYear();
+    const cutoffM = String(ninetyDaysAgo.getMonth() + 1).padStart(2, '0');
+    const cutoffD = String(ninetyDaysAgo.getDate()).padStart(2, '0');
+    const cutoffStr = `${cutoffY}-${cutoffM}-${cutoffD}`;
+
+    let currentBalance = 0;
+    const eventsByDay = {};
+
+    const processEvent = (amount, dateStr) => {
+      if (!dateStr) return;
+      if (dateStr < cutoffStr) {
+        currentBalance += amount;
+      } else {
+        eventsByDay[dateStr] = (eventsByDay[dateStr] || 0) + amount;
+      }
+    };
+
+    people.forEach(p => {
+      (p.data.payments || []).forEach(pay => {
+        processEvent(parseFloat(pay.amount || 0), pay.date);
+      });
+    });
+    donations.forEach(d => {
+      processEvent(parseFloat(d.amount || 0), d.date);
+    });
+    expenses.forEach(e => {
+      processEvent(-parseFloat(e.amount || 0), e.date);
+    });
+
+    const dataPoints = [];
+    let minVal = currentBalance;
+    let maxVal = currentBalance;
+
+    for (let i = 0; i <= 90; i++) {
+      const d = new Date(ninetyDaysAgo);
+      d.setDate(d.getDate() + i);
+
+      const dY = d.getFullYear();
+      const dM = String(d.getMonth() + 1).padStart(2, '0');
+      const dD = String(d.getDate()).padStart(2, '0');
+      const dayStr = `${dY}-${dM}-${dD}`;
+
+      if (eventsByDay[dayStr]) {
+        currentBalance += eventsByDay[dayStr];
+      }
+
+      dataPoints.push({ x: i, y: currentBalance, date: d.toISOString() });
+      if (currentBalance < minVal) minVal = currentBalance;
+      if (currentBalance > maxVal) maxVal = currentBalance;
+    }
+
+    res.json({
+      heroAmount: totalBalance,
+      totalIncome: periodInc,
+      totalExpenses: periodExp,
+      chartDataCache: { dataPoints, minVal, maxVal }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to fetch stats' });
+  }
+});
+
+app.post('/api/donations', dbRateLimit, verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { amount, name, date, id } = req.body || {};
+    if (!amount || !name || !date || !id) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const newDonation = { amount, name, date, id };
+
+    const record = await getStateRecord(appConfig, 'donations');
+    const existingDonations = record?.value ? Object.values(record.value) : [];
+    existingDonations.push(newDonation);
+
+    await upsertStateValue(appConfig, 'donations', existingDonations);
+
+    res.json({ success: true, donation: newDonation });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to add donation' });
+  }
+});
+
+app.post('/api/expenses', dbRateLimit, verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { amount, issuer, description, date, id, receipt } = req.body || {};
+    if (!amount || !issuer || !description || !date || !id) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const newExpense = { amount, issuer, description, date, id, receipt };
+
+    const existingExpenses = await listExpenseRecords(appConfig);
+    const expensesMap = existingExpenses.map(r => r.data);
+    expensesMap.push(newExpense);
+
+    await syncExpenseRecords(appConfig, expensesMap);
+
+    res.json({ success: true, expense: newExpense });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to add expense' });
+  }
+});
+
+app.get('/api/transactions', dbRateLimit, verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 150;
+    const offset = (page - 1) * limit;
+
+    const [people, donationsData, expensesData] = await Promise.all([
+      listPeopleRecords(appConfig),
+      getStateRecord(appConfig, 'donations'),
+      listExpenseRecords(appConfig)
+    ]);
+
+    const donations = donationsData?.value ? Object.values(donationsData.value) : [];
+    const expenses = expensesData.map(r => r.data);
+
+    const all = [];
+
+    people.forEach(p => {
+      (p.data.payments || []).forEach(pay => {
+        all.push({ ...pay, who: p.data.name, type: 'pay' });
+      });
+    });
+    donations.forEach(d => {
+      all.push({ ...d, who: d.name || 'Spende', type: 'don' });
+    });
+    expenses.forEach(e => {
+      all.push({ ...e, who: e.issuer, type: 'exp' });
+    });
+
+    all.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    const total = all.length;
+    const items = all.slice(offset, offset + limit);
+
+    res.json({
+      items,
+      total,
+      page,
+      limit,
+      hasMore: offset + limit < total
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Failed to fetch transactions' });
+  }
+});
 
 app.get('/api/db', dbRateLimit, async (req, res) => {
   if (setupMode) {
@@ -827,8 +1100,25 @@ app.post('/api/db/transaction', dbRateLimit, verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
+    if (nextValue && typeof nextValue === 'object') {
+        delete nextValue.computed;
+    }
+
     const updated = await upsertPeopleRecord(appConfig, id, nextValue, currentVersion);
-    res.json({ value: updated.data, version: updated.updated });
+
+    const settings = await getStateValue(appConfig, 'settings', DEFAULT_SETTINGS);
+    const todayStr = getTodayStr();
+    const p = preprocessPerson(updated.data);
+    const pStatus = calculatePaymentStatus(p, settings);
+    p.computed = {
+      paidUntil: pStatus.paidUntil ? pStatus.paidUntil.toISOString() : null,
+      remainingCredit: pStatus.remainingCredit,
+      statusMeta: calculateTimeRemaining(p, pStatus.paidUntil, todayStr),
+      overdueAmount: calculateOverdueAmount(p, pStatus.paidUntil, pStatus.remainingCredit, settings, todayStr),
+      currentStatus: getCurrentStatus(p)
+    };
+
+    res.json({ value: p, version: updated.updated });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message || 'Transaction failed' });
   }

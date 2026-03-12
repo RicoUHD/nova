@@ -345,66 +345,7 @@ window.toggleDetails = function(id) {
  * @param {Object} person - Die Person
  * @returns {string} - Der aktuell gültige Status
  */
-function getCurrentStatus(person) {
-    const today = new Date();
-    return getStatusForMonth(person, today.getFullYear(), today.getMonth());
-}
 
-/**
- * Gibt den Status einer Person für einen bestimmten Monat zurück.
- * Berücksichtigt die komplette Statushistorie inkl. rückwirkender/zukünftiger Änderungen.
- * @param {Object} person - Die Person
- * @param {number} year - Das Jahr
- * @param {number} month - Der Monat (0-11)
- * @returns {string|null} - Der Status oder null wenn vor Mitgliedschaft
- */
-function getStatusForMonth(person, year, month, sortedHistory = null) {
-    // ⚡ Bolt: Fast integer comparison using pre-calculated values
-    const currentTotal = year * 12 + month;
-
-    // Check if before membership
-    const memberSince = person.memberSinceObj || new Date(person.originalMemberSince || person.memberSince);
-    const memberStartTotal = memberSince.getFullYear() * 12 + memberSince.getMonth();
-
-    if (currentTotal < memberStartTotal) {
-        return null;
-    }
-
-    // Use passed sortedHistory or person.statusHistory (which is now pre-sorted in loadData)
-    const history = sortedHistory || person.statusHistory;
-
-    // Fast path: loop through pre-processed history
-    if (history && history.length > 0 && history[0].startTotal !== undefined) {
-        for (const entry of history) {
-            if (currentTotal >= entry.startTotal && (!entry.endTotal || currentTotal < entry.endTotal)) {
-                return entry.status;
-            }
-        }
-    } else {
-        // Fallback for safety (e.g. if data not normalized)
-        const targetDate = new Date(year, month, 15);
-        const startOfMemberMonth = new Date(memberSince.getFullYear(), memberSince.getMonth(), 1);
-
-        if (targetDate < startOfMemberMonth) return null;
-
-        const fallbackHistory = safeList(person.statusHistory).slice().sort(
-            (a, b) => new Date(a.startDate) - new Date(b.startDate)
-        );
-
-        for (const entry of fallbackHistory) {
-            const start = new Date(entry.startDate);
-            const end = entry.endDate ? new Date(entry.endDate) : null;
-            const startMonth = new Date(start.getFullYear(), start.getMonth(), 1);
-
-            if (targetDate >= startMonth && (!end || targetDate < new Date(end.getFullYear(), end.getMonth(), 1))) {
-                return entry.status;
-            }
-        }
-    }
-
-    // Kein Treffer in Historie? Aktueller Status gilt
-    return person.status;
-}
 
 /**
  * Berechnet die Gesamtkosten für alle Monate seit Mitgliedschaft bis zu einem Zieldatum.
@@ -412,44 +353,7 @@ function getStatusForMonth(person, year, month, sortedHistory = null) {
  * @param {Date} untilDate - Bis zu welchem Datum berechnen
  * @returns {number} - Gesamtkosten in Euro
  */
-function calculateTotalCostUntil(person, untilDate) {
-    const memberSince = person.memberSinceObj || new Date(person.originalMemberSince || person.memberSince);
-    let totalCost = 0;
 
-    let year = memberSince.getFullYear();
-    let month = memberSince.getMonth();
-
-    // History is already sorted in loadData
-    const sortedHistory = person.statusHistory;
-
-    // ⚡ Bolt: Optimized linear scan
-    let historyIdx = 0;
-
-    // ⚡ Bolt: Pre-calculate target months for faster integer comparison
-    const targetTotal = untilDate.getFullYear() * 12 + untilDate.getMonth();
-
-    while ((year * 12 + month) <= targetTotal) {
-        const currentTotal = year * 12 + month;
-
-        const { status: historyStatus, newIdx } = findStatusInHistory(sortedHistory, historyIdx, currentTotal);
-        historyIdx = newIdx;
-
-        const status = historyStatus || person.status;
-
-        if (status && settings[status]) {
-            totalCost += settings[status];
-        }
-
-        // Nächster Monat
-        month++;
-        if (month > 11) {
-            month = 0;
-            year++;
-        }
-    }
-
-    return totalCost;
-}
 
 /**
  * Berechnet das "Bezahlt bis" Datum basierend auf einfacher Logik:
@@ -458,212 +362,25 @@ function calculateTotalCostUntil(person, untilDate) {
  * @param {Object} person - Die Person
  * @returns {Date|null} - Das Datum bis zu dem bezahlt wurde
  */
-function calculatePaidUntil(person) {
-    return calculatePaymentStatus(person).paidUntil;
-}
+
 
 /**
  * ⚡ Bolt: New function returning detailed payment status including remaining credit.
  * Used to optimize overdue calculation.
  */
-function calculatePaymentStatus(person) {
-    // ⚡ Bolt: Memoization to avoid costly re-calculation on every render
-    if (person._cache_paymentStatus &&
-        person._cache_version === settingsVersion &&
-        person._cache_totalPaid === person.totalPaid) {
-        return person._cache_paymentStatus;
-    }
 
-    const totalPaid = person.totalPaid || 0;
-    const start = person.memberSinceObj || new Date(person.originalMemberSince || person.memberSince);
-    let result;
-
-    // Fall 1: Keine Zahlungen
-    if (totalPaid === 0) {
-        // Letzter Tag des Vormonats
-        result = {
-            paidUntil: new Date(start.getFullYear(), start.getMonth(), 0),
-            remainingCredit: 0
-        };
-    } else {
-        let remainingCredit = totalPaid;
-
-        let year = start.getFullYear();
-        let month = start.getMonth();
-
-        // History is already sorted in loadData
-        const sortedHistory = person.statusHistory;
-
-        // Maximal 120 Monate (10 Jahre) in die Zukunft prüfen
-        const maxIterations = 120;
-        let iterations = 0;
-
-        // ⚡ Bolt: Optimized linear scan through history
-        let historyIdx = 0;
-
-        while (remainingCredit >= 0 && iterations < maxIterations) {
-            // Fast status lookup using pre-calculated total months
-            const currentTotal = year * 12 + month;
-
-            const { status: historyStatus, newIdx } = findStatusInHistory(sortedHistory, historyIdx, currentTotal);
-            historyIdx = newIdx;
-
-            const status = historyStatus || person.status; // Default/Fallback
-            const monthlyRate = status ? (settings[status] || 0) : 0;
-
-            if (monthlyRate > 0) {
-                if (remainingCredit >= monthlyRate) {
-                    remainingCredit -= monthlyRate;
-                } else {
-                    // Nicht genug für den vollen Monat - Vormonat ist bezahlt
-                    break;
-                }
-            }
-
-            // Nächster Monat
-            month++;
-            if (month > 11) {
-                month = 0;
-                year++;
-            }
-            iterations++;
-        }
-
-        // Der letzte vollständig bezahlte Monat ist der Vormonat
-        month--;
-        if (month < 0) {
-            month = 11;
-            year--;
-        }
-
-        // Letzter Tag dieses Monats
-        result = {
-            paidUntil: new Date(year, month + 1, 0),
-            remainingCredit: remainingCredit
-        };
-    }
-
-    // Cache the result
-    person._cache_paymentStatus = result;
-    person._cache_version = settingsVersion;
-    person._cache_totalPaid = totalPaid;
-
-    return result;
-}
 
 /**
  * ⚡ Bolt: Helper to calculate cost for a range. Used by optimized overdue calculation.
  */
-function calculateCostRange(person, startDate, endDate) {
-    let totalCost = 0;
-    let year = startDate.getFullYear();
-    let month = startDate.getMonth();
-    const sortedHistory = person.statusHistory;
 
-    // Safety break
-    let limit = 0;
-
-    // ⚡ Bolt: Optimized linear scan
-    let historyIdx = 0;
-
-    // ⚡ Bolt: Pre-calculate target months for faster integer comparison
-    const targetTotal = endDate.getFullYear() * 12 + endDate.getMonth();
-
-    while ((year * 12 + month) <= targetTotal && limit < 120) {
-        const currentTotal = year * 12 + month;
-
-        const { status: historyStatus, newIdx } = findStatusInHistory(sortedHistory, historyIdx, currentTotal);
-        historyIdx = newIdx;
-
-        const status = historyStatus || person.status;
-
-        if (status && settings[status]) {
-            totalCost += settings[status];
-        }
-        month++;
-        if (month > 11) { month = 0; year++; }
-        limit++;
-    }
-    return totalCost;
-}
 
 /**
  * Berechnet den verbleibenden Zeitraum und Status für eine Person.
  * @param {Object} person - Die Person
  * @returns {Object} - { text, isOverdue, isSoonDue }
  */
-function calculateTimeRemaining(person, preCalculatedPaidUntil, todayStrArg = null) {
-    // START CHECK
-    const standingOrders = safeList(person.standingOrders);
-    const todayStr = todayStrArg || getTodayStr();
 
-    const hasActiveSO = standingOrders.some(so => {
-         if (so.startDate > todayStr) return false;
-         if (so.endDate && so.endDate < todayStr) return false;
-         return true;
-    });
-
-    const paidUntil = preCalculatedPaidUntil !== undefined ? preCalculatedPaidUntil : calculatePaidUntil(person);
-    if (!paidUntil) {
-        if (hasActiveSO) {
-             return { text: 'Keine Zahlungen', isOverdue: true, isSoonDue: false, isActiveStandingOrder: true };
-        }
-        return { text: 'Keine Zahlungen', isOverdue: true, isSoonDue: false };
-    }
-
-    const today = new Date();
-    // ⚡ Bolt: Calculate monthsDiff using integer math
-    const currentTotal = today.getFullYear() * 12 + today.getMonth();
-    const paidTotal = paidUntil.getFullYear() * 12 + paidUntil.getMonth();
-    const monthsDiff = paidTotal - currentTotal;
-
-    if (monthsDiff < 0) {
-        const overdueMonths = Math.abs(monthsDiff);
-
-        if (hasActiveSO) {
-            // If there's an active standing order and they are only missing the current month's payment (monthsDiff === -1),
-            // they shouldn't be considered overdue yet because the standing order might just execute later in the month.
-            // If they are missing more than one month, then the standing order must have failed or wasn't enough, so they are overdue.
-            if (monthsDiff === -1) {
-                return {
-                    text: 'Dauerauftrag aktiv',
-                    isOverdue: false,
-                    isSoonDue: true, // Mark them as soon due since the standing order is expected this month
-                    isActiveStandingOrder: true
-                };
-            } else {
-                return {
-                    text: 'Dauerauftrag aktiv (Betrag fehlt)',
-                    isOverdue: true,
-                    isSoonDue: false,
-                    isActiveStandingOrder: true
-                };
-            }
-        }
-
-        return {
-            text: `${overdueMonths} Monat${overdueMonths !== 1 ? 'e' : ''} überfällig`,
-            isOverdue: true,
-            isSoonDue: false
-        };
-    }
-
-    if (hasActiveSO) {
-        return {
-            text: 'Dauerauftrag aktiv',
-            isOverdue: false,
-            isSoonDue: false,
-            isActiveStandingOrder: true
-        };
-    }
-
-    if (monthsDiff === 0) {
-        return { text: 'läuft diesen Monat ab', isOverdue: false, isSoonDue: true };
-    } else if (monthsDiff === 1) {
-        return { text: 'läuft nächsten Monat ab', isOverdue: false, isSoonDue: true };
-    } else {
-        return { text: `noch ${monthsDiff} Monat${monthsDiff !== 1 ? 'e' : ''}`, isOverdue: false, isSoonDue: false };
-    }
 }
 
 /**
@@ -673,47 +390,7 @@ function calculateTimeRemaining(person, preCalculatedPaidUntil, todayStrArg = nu
  * @param {number} [preCalcCredit] - Optional: Vorberechnetes Restguthaben
  * @returns {number} - Fehlender Betrag (0 wenn ausgeglichen oder Guthaben)
  */
-function calculateOverdueAmount(person, preCalcPaidUntil, preCalcCredit, todayStrArg = null) {
-    const today = new Date();
 
-    // Check for active standing orders
-    const standingOrders = safeList(person.standingOrders);
-    const todayStr = todayStrArg || getTodayStr();
-    const hasActiveSO = standingOrders.some(so => {
-         if (so.startDate > todayStr) return false;
-         if (so.endDate && so.endDate < todayStr) return false;
-         return true;
-    });
-
-    // Wenn es einen aktiven Dauerauftrag gibt, fehlt der Betrag für diesen Monat noch nicht (wird ja noch ausgeführt)
-    // Ziel: Ende des Vormonats, andernfalls Ende des aktuellen Monats
-    const targetDate = hasActiveSO
-        ? new Date(today.getFullYear(), today.getMonth(), 0)
-        : new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
-    // ⚡ Bolt: Optimized path avoiding full history iteration
-    if (preCalcPaidUntil) {
-        // Start calculation from the month AFTER paidUntil
-        const startCalc = new Date(preCalcPaidUntil);
-        startCalc.setDate(1);
-        startCalc.setMonth(startCalc.getMonth() + 1);
-
-        // If startCalc > targetDate, we are ahead of payment (not overdue), return 0
-        if (startCalc > targetDate) return 0;
-
-        const missingCost = calculateCostRange(person, startCalc, targetDate);
-        const credit = preCalcCredit || 0;
-        const finalMissing = missingCost - credit;
-
-        return finalMissing > 0 ? finalMissing : 0;
-    }
-
-    const totalCost = calculateTotalCostUntil(person, targetDate);
-    const totalPaid = person.totalPaid || 0;
-
-    const missing = totalCost - totalPaid;
-    return missing > 0 ? missing : 0;
-}
 
 /**
  * Generiert HTML für die Statushistorie einer Person.
@@ -773,105 +450,7 @@ function generateStatusHistoryHTML(person) {
 
 // --- ENDE MATHEMATIK & LOGIK ---
 
-function checkAndExecuteStandingOrders(person) {
-    if (!person.standingOrders || !Array.isArray(person.standingOrders) || person.standingOrders.length === 0) return null;
 
-    let modified = false;
-    const payments = safeList(person.payments);
-    const standingOrders = safeList(person.standingOrders);
-    const today = new Date();
-    today.setHours(23,59,59,999); // Use end of day to avoid timezone lag (UTC vs Local)
-
-    // ⚡ Bolt: Build a Set for O(1) payment ID lookups, avoiding O(N) array scans inside the loop
-    const existingPaymentIds = new Set(payments.map(p => p.id));
-    const updatedStandingOrders = [];
-
-    for (const so of standingOrders) {
-        let soModified = false;
-        let currentSO = { ...so };
-        const startDate = new Date(currentSO.startDate);
-        const dayOfMonth = startDate.getDate();
-        let lastAuto = currentSO.lastAutoPayment ? new Date(currentSO.lastAutoPayment) : null;
-
-        // Determine limit date: min(today, endDate)
-        let limitDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-        let isExpired = false;
-
-        if (currentSO.endDate) {
-            const end = new Date(currentSO.endDate);
-            end.setHours(23, 59, 59, 999);
-
-            // Constraint 1: Still respect currentSO.endDate.
-            if (end < limitDate) {
-                limitDate = end;
-            }
-
-            if (end < today) {
-                isExpired = true;
-            }
-        }
-
-        // Determine where to start checking
-        let nextDueDate;
-        if (!lastAuto) {
-            nextDueDate = new Date(startDate);
-        } else {
-            nextDueDate = new Date(lastAuto);
-            nextDueDate.setDate(1);
-            nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-            const maxDays = new Date(nextDueDate.getFullYear(), nextDueDate.getMonth() + 1, 0).getDate();
-            nextDueDate.setDate(Math.min(dayOfMonth, maxDays));
-        }
-
-        // Loop until limitDate
-        // Safety break to prevent infinite loops if dates are messed up
-        let safety = 0;
-        while (nextDueDate <= limitDate && safety < 120) {
-            const dateStr = nextDueDate.toISOString().split('T')[0];
-            const paymentId = `auto_${currentSO.id}_${dateStr}`;
-
-            // ⚡ Bolt: O(1) lookup instead of O(N) payments.some(...)
-            if (!existingPaymentIds.has(paymentId)) {
-                payments.push({
-                    id: paymentId,
-                    amount: parseFloat(currentSO.amount),
-                    date: dateStr,
-                    description: (currentSO.note || 'Dauerauftrag') + ' (Auto)',
-                    isAuto: true
-                });
-                existingPaymentIds.add(paymentId); // Update Set with new ID
-                modified = true;
-                soModified = true;
-            }
-
-            // Move pointer forward
-            lastAuto = new Date(nextDueDate);
-
-            nextDueDate.setDate(1);
-            nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-            const maxDays = new Date(nextDueDate.getFullYear(), nextDueDate.getMonth() + 1, 0).getDate();
-            nextDueDate.setDate(Math.min(dayOfMonth, maxDays));
-            safety++;
-        }
-
-        if (soModified && lastAuto) {
-            currentSO.lastAutoPayment = lastAuto.toISOString().split('T')[0];
-        }
-
-        if (isExpired) {
-            // Remove from list if expired
-            modified = true;
-        } else {
-            updatedStandingOrders.push(currentSO);
-            if (soModified) modified = true;
-        }
-    }
-
-    if (modified) {
-        return { ...person, payments, standingOrders: updatedStandingOrders };
-    }
-    return null;
-}
 
 let requests = [];
 
@@ -994,10 +573,8 @@ async function loadData() {
         advancedConfigLoaded = false;
         advancedConfigAppName = null;
         // Admin: fetch full dataset
-        const [pSnap, dSnap, eSnap, sSnap, cSnap, rSnap, uSnap] = await Promise.all([
+        const [pSnap, sSnap, cSnap, rSnap, uSnap] = await Promise.all([
             get(child(dbRef, 'people')),
-            get(child(dbRef, 'donations')),
-            get(child(dbRef, 'expenses')),
             get(child(dbRef, 'settings')),
             get(child(dbRef, 'system/inviteCode')),
             get(child(dbRef, 'requests')),
@@ -1005,8 +582,6 @@ async function loadData() {
         ]);
 
         people = safeList(pSnap.val());
-        donations = safeList(dSnap.val());
-        expenses = safeList(eSnap.val());
         requests = safeList(rSnap.val());
         if (sSnap.exists()) {
             settings = sSnap.val();
@@ -1040,25 +615,7 @@ async function loadData() {
     // Normalize people data
     people.forEach(person => preprocessPerson(person));
 
-    // Check standing orders (Admin only to prevent conflicts)
-    if (currentUser && currentUser.admin) {
-        const updates = [];
-        people.forEach(person => {
-            const result = checkAndExecuteStandingOrders(person);
-            if (result) {
-                const newTotal = safeList(result.payments).reduce((acc, p) => acc + parseFloat(p.amount), 0);
-                // Update in DB
-                updates.push(update(ref(db, 'people/' + person.id), {
-                    payments: result.payments,
-                    standingOrders: result.standingOrders,
-                    totalPaid: newTotal
-                }));
-                // Update in memory
-                Object.assign(person, result, { totalPaid: newTotal });
-            }
-        });
-        if (updates.length > 0) await Promise.all(updates);
-    }
+
 
     renderAll();
     } catch (err) {
@@ -1496,9 +1053,11 @@ window.approveRequest = async (reqId) => {
                 date: req.data.date,
                 receipt: req.data.receipt
             };
-            const nextExpenses = [...expenses, newExpense];
-            await set(ref(db, 'expenses'), nextExpenses);
-            expenses = nextExpenses;
+            await fetchWithAuth(`${config.apiBaseUrl}/expenses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newExpense)
+            });
         } else if(req.type === 'standing_order') {
             await mutatePerson(req.personId, (person) => {
                 const standingOrders = safeList(person.standingOrders);
@@ -1559,16 +1118,11 @@ function renderUserView() {
     }
 
     const p = people[0]; // User has only one person (themselves)
-    const { paidUntil, remainingCredit } = calculatePaymentStatus(p);
 
-    // ⚡ Bolt: Centralized todayStr calculation
-    const todayStr = getTodayStr();
-
-    const statusMeta = calculateTimeRemaining(p, paidUntil, todayStr);
-    const overdueAmount = statusMeta.isOverdue ? calculateOverdueAmount(p, paidUntil, remainingCredit, todayStr) : 0;
-
-    // Get current status (not future status)
-    const currentStatus = getCurrentStatus(p);
+    const paidUntil = p.computed?.paidUntil ? new Date(p.computed.paidUntil) : null;
+    const statusMeta = p.computed?.statusMeta || { text: 'Unbekannt', isOverdue: false, isSoonDue: false, isActiveStandingOrder: false };
+    const overdueAmount = p.computed?.overdueAmount || 0;
+    const currentStatus = p.computed?.currentStatus || p.status;
 
     // Format date to show only month and year
     let dateText = paidUntil ? monthYearFormatter.format(paidUntil) : 'Nie';
@@ -1679,16 +1233,8 @@ function renderPeople() {
     }
     empty.style.display = 'none';
 
-    // ⚡ Bolt: Centralized todayStr calculation for performance
-    const todayStr = getTodayStr();
-
-    // ⚡ Bolt: Calculate costly status/dates ONCE per person here
     const processed = people.map(p => {
-        const { paidUntil, remainingCredit } = calculatePaymentStatus(p);
-        const statusMeta = calculateTimeRemaining(p, paidUntil, todayStr);
-        // Only calculate overdue amount if actually overdue
-        const overdueAmount = statusMeta.isOverdue ? calculateOverdueAmount(p, paidUntil, remainingCredit, todayStr) : 0;
-        return { p, paidUntil, statusMeta, overdueAmount };
+        return { p, statusMeta: p.computed?.statusMeta || { isOverdue: false } };
     });
 
     const overdueItems = processed.filter(x => x.statusMeta.isOverdue);
@@ -1700,13 +1246,13 @@ function renderPeople() {
     let overdueHtml = '';
     if(overdueItems.length > 0) {
         overdueHtml += `<h3 class="list-section-title" style="color:var(--danger)">Überfällig (${overdueItems.length})</h3>`;
-        overdueHtml += overdueItems.map(item => generatePersonHTML(item.p, item)).join('');
+        overdueHtml += overdueItems.map(item => generatePersonHTML(item.p, null)).join('');
     }
 
     let validHtml = '';
     if(currentItems.length > 0) {
         validHtml += `<h3 class="list-section-title" style="color:var(--success)">Aktuelle Mitglieder (${currentItems.length})</h3>`;
-        validHtml += currentItems.map(item => generatePersonHTML(item.p, item)).join('');
+        validHtml += currentItems.map(item => generatePersonHTML(item.p, null)).join('');
     }
 
     list.innerHTML = `
@@ -1795,13 +1341,10 @@ function generateTimelineHTML(person) {
 }
 
 function generatePersonHTML(p, preCalcData = null) {
-    const paidUntil = preCalcData ? preCalcData.paidUntil : calculatePaidUntil(p);
-    // Note: statusMeta in preCalcData already utilized paidUntil internally
-    const statusMeta = preCalcData ? preCalcData.statusMeta : calculateTimeRemaining(p, paidUntil);
-    const overdueAmount = preCalcData ? preCalcData.overdueAmount : calculateOverdueAmount(p);
-
-    // Get current status (not future status)
-    const currentStatus = getCurrentStatus(p);
+    const paidUntil = p.computed?.paidUntil ? new Date(p.computed.paidUntil) : null;
+    const statusMeta = p.computed?.statusMeta || { text: 'Unbekannt', isOverdue: false, isSoonDue: false };
+    const overdueAmount = p.computed?.overdueAmount || 0;
+    const currentStatus = p.computed?.currentStatus || p.status;
 
     let dateText = paidUntil ? monthYearFormatter.format(paidUntil) : 'Nie';
     let pillClass = 'status-ok';
@@ -1902,48 +1445,26 @@ function generatePersonHTML(p, preCalcData = null) {
     `;
 }
 
-function renderStats() {
-    let periodInc = 0, periodExp = 0;
-    let totalInc = 0, totalExp = 0;
+async function renderStats() {
+    try {
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/stats`);
+        if (!response.ok) throw new Error('Failed to fetch stats');
+        const stats = await response.json();
 
-    // ⚡ Bolt: Using string comparison for dates to avoid creating thousands of Date objects
-    const startStr = settings.reportStartDate || '';
+        document.getElementById('heroAmount').textContent = currencyFormatter.format(stats.heroAmount);
+        document.getElementById('totalIncome').textContent = currencyFormatter.format(stats.totalIncome);
+        document.getElementById('totalExpenses').textContent = currencyFormatter.format(stats.totalExpenses);
 
-    people.forEach(p => {
-        const pTotal = parseFloat(p.totalPaid || 0);
-        totalInc += pTotal;
-
-        if (startStr) {
-            // If we have a filter, we still need to iterate payments
-            safeList(p.payments).forEach(pay => {
-                if (pay.date >= startStr) periodInc += parseFloat(pay.amount);
+        chartDataCache = stats.chartDataCache;
+        if (chartDataCache && chartDataCache.dataPoints) {
+            chartDataCache.dataPoints.forEach(pt => {
+                pt.date = new Date(pt.date);
             });
-        } else {
-            periodInc += pTotal;
         }
-    });
-
-    donations.forEach(d => {
-        const amount = parseFloat(d.amount);
-        totalInc += amount;
-        if (!startStr || d.date >= startStr) periodInc += amount;
-    });
-
-    expenses.forEach(e => {
-        const amount = parseFloat(e.amount);
-        totalExp += amount;
-        if (!startStr || e.date >= startStr) periodExp += amount;
-    });
-
-    const totalBalance = totalInc - totalExp;
-
-    // ⚡ Bolt: Using persistent currencyFormatter
-    document.getElementById('heroAmount').textContent = currencyFormatter.format(totalBalance);
-    document.getElementById('totalIncome').textContent = currencyFormatter.format(periodInc);
-    document.getElementById('totalExpenses').textContent = currencyFormatter.format(periodExp);
-
-    chartDataCache = null;
-    renderBalanceChart();
+        renderBalanceChart();
+    } catch (err) {
+        console.error('Error rendering stats:', err);
+    }
 }
 
 function renderBalanceChart() {
@@ -1961,80 +1482,7 @@ function renderBalanceChart() {
 
     ctx.clearRect(0, 0, width, height);
 
-    if (!chartDataCache) {
-        // ⚡ Bolt: Optimized Data Collection (O(N) vs O(N log N))
-        // Avoids creating Date objects for every transaction and sorting them.
-
-        // 1. Determine Cutoff Date
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
-        const ninetyDaysAgo = new Date(today);
-        ninetyDaysAgo.setDate(today.getDate() - 90);
-
-        // Create comparable string (YYYY-MM-DD) from ninetyDaysAgo
-        // Note: We use local year/month/day to match the input date strings
-        const cutoffY = ninetyDaysAgo.getFullYear();
-        const cutoffM = String(ninetyDaysAgo.getMonth() + 1).padStart(2, '0');
-        const cutoffD = String(ninetyDaysAgo.getDate()).padStart(2, '0');
-        const cutoffStr = `${cutoffY}-${cutoffM}-${cutoffD}`;
-
-        let currentBalance = 0;
-        const eventsByDay = {};
-
-        // 2. Single Pass Aggregation
-        // Helper to process amount/date pairs
-        const processEvent = (amount, dateStr) => {
-            if (!dateStr) return; // Skip if no date
-
-            // String comparison works for ISO dates (YYYY-MM-DD)
-            if (dateStr < cutoffStr) {
-                currentBalance += amount;
-            } else {
-                // Aggregate for chart
-                eventsByDay[dateStr] = (eventsByDay[dateStr] || 0) + amount;
-            }
-        };
-
-        people.forEach(p => {
-            safeList(p.payments).forEach(pay => {
-                processEvent(parseFloat(pay.amount), pay.date);
-            });
-        });
-        donations.forEach(d => {
-            processEvent(parseFloat(d.amount), d.date);
-        });
-        expenses.forEach(e => {
-            processEvent(-parseFloat(e.amount), e.date);
-        });
-
-        // 3. Generate Data Points
-        const dataPoints = [];
-        let minVal = currentBalance;
-        let maxVal = currentBalance;
-
-        for (let i = 0; i <= 90; i++) {
-            const d = new Date(ninetyDaysAgo);
-            d.setDate(d.getDate() + i);
-
-            // Generate lookup key (Local YYYY-MM-DD)
-            const dY = d.getFullYear();
-            const dM = String(d.getMonth() + 1).padStart(2, '0');
-            const dD = String(d.getDate()).padStart(2, '0');
-            const dayStr = `${dY}-${dM}-${dD}`;
-
-            if (eventsByDay[dayStr]) {
-                currentBalance += eventsByDay[dayStr];
-            }
-
-            dataPoints.push({ x: i, y: currentBalance, date: d });
-
-            if (currentBalance < minVal) minVal = currentBalance;
-            if (currentBalance > maxVal) maxVal = currentBalance;
-        }
-
-        chartDataCache = { dataPoints, minVal, maxVal };
-    }
+    if (!chartDataCache) return;
 
     const { dataPoints, minVal, maxVal } = chartDataCache;
 
@@ -2113,88 +1561,88 @@ window.addEventListener('resize', () => {
     }, 100);
 });
 
-window.showTransactionModal = function(resetLimit = true) {
+let currentTransactionPage = 1;
+const TRANSACTION_LIMIT = 150;
+let hasMoreTransactions = true;
+
+window.showTransactionModal = async function(resetLimit = true) {
     if (resetLimit) {
-        transactionDisplayLimit = 150;
-        cachedTransactions = null; // Clear cache on reset
+        currentTransactionPage = 1;
+        cachedTransactions = [];
+        hasMoreTransactions = true;
     }
 
     const modal = document.getElementById('transaction-modal');
     const container = document.getElementById('full-transaction-list');
-    let all = cachedTransactions;
 
-    if (!all) {
-        all = [];
-        const safePeople = safeList(people);
-        const safeDonations = safeList(donations);
-        const safeExpenses = safeList(expenses);
-
-        safePeople.forEach(p => {
-            safeList(p.payments).forEach(pay => {
-                all.push({...pay, who: p.name, type: 'pay'});
-            });
-        });
-        safeDonations.forEach(d => {
-            all.push({...d, who: d.name || 'Spende', type: 'don'});
-        });
-        safeExpenses.forEach(e => {
-            all.push({...e, who: e.issuer, type: 'exp'});
-        });
-
-        // ⚡ Bolt: Use localeCompare for faster sorting without Date objects
-        all.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-        cachedTransactions = all;
+    if (resetLimit) {
+        container.innerHTML = '<div class="spinner" style="margin:20px auto;"></div><div style="text-align:center; color:var(--text-secondary);">Lade Buchungen...</div>';
+        if (!modal?.classList.contains('show')) {
+            openModal('transaction-modal');
+        }
     }
 
-    if (all.length === 0) {
-        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">Keine Buchungen vorhanden.</div>';
-    } else {
-        // ⚡ Bolt: Limit DOM elements rendered to avoid blocking the main thread on large histories
-        const preview = all.slice(0, transactionDisplayLimit);
-        let html = preview.map(t => {
-            const isExp = t.type === 'exp';
-            const color = isExp ? 'text-danger' : 'text-success';
-            const sign = isExp ? '-' : '+';
-            const icon = t.type === 'pay' ? '👤' : (t.type === 'don' ? '💝' : '💸');
-            const hasReceipt = t.receipt ? '<span style="margin-left:5px" title="Beleg vorhanden">📷</span>' : '';
-            return `
-                <div class="trans-item" role="button" tabindex="0" onclick="showTransactionDetails('${t.id}', '${t.type}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails('${t.id}', '${t.type}')}" style="cursor:pointer;">
-                    <div class="trans-left">
-                        <span style="font-weight:600;">${icon} ${t.who}</span>
-                        <div class="trans-meta">${t.description || '-'} ${hasReceipt} • ${t.date ? dateFormatter.format(new Date(t.date)) : 'Kein Datum'}</div>
+    try {
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/transactions?page=${currentTransactionPage}&limit=${TRANSACTION_LIMIT}`);
+        if (!response.ok) throw new Error('Failed to fetch transactions');
+        const data = await response.json();
+
+        if (resetLimit) {
+            cachedTransactions = data.items;
+        } else {
+            cachedTransactions = [...cachedTransactions, ...data.items];
+        }
+
+        hasMoreTransactions = data.hasMore;
+
+        if (cachedTransactions.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">Keine Buchungen vorhanden.</div>';
+        } else {
+            let html = cachedTransactions.map(t => {
+                const isExp = t.type === 'exp';
+                const color = isExp ? 'text-danger' : 'text-success';
+                const sign = isExp ? '-' : '+';
+                const icon = t.type === 'pay' ? '👤' : (t.type === 'don' ? '💝' : '💸');
+                const hasReceipt = t.receipt ? '<span style="margin-left:5px" title="Beleg vorhanden">📷</span>' : '';
+                return `
+                    <div class="trans-item" role="button" tabindex="0" onclick="showTransactionDetails('${t.id}', '${t.type}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails('${t.id}', '${t.type}')}" style="cursor:pointer;">
+                        <div class="trans-left">
+                            <span style="font-weight:600;">${icon} ${t.who}</span>
+                            <div class="trans-meta">${t.description || '-'} ${hasReceipt} • ${t.date ? dateFormatter.format(new Date(t.date)) : 'Kein Datum'}</div>
+                        </div>
+                        <div class="trans-amount ${color}">${sign}${formatCurrency(t.amount)}€</div>
                     </div>
-                    <div class="trans-amount ${color}">${sign}${formatCurrency(t.amount)}€</div>
-                </div>
-            `;
-        }).join('');
+                `;
+            }).join('');
 
-        if (all.length > preview.length) {
-            html += `
-                <div style="text-align:center; padding:10px;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 10px;">Es werden ${preview.length} von ${all.length} Buchungen angezeigt.</div>
-                    <button class="btn btn-secondary" onclick="loadMoreTransactions()">Mehr laden...</button>
-                </div>
-            `;
+            if (hasMoreTransactions) {
+                html += `
+                    <div style="text-align:center; padding:10px;">
+                        <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 10px;">Es werden ${cachedTransactions.length} von ${data.total} Buchungen angezeigt.</div>
+                        <button class="btn btn-secondary" id="btn-load-more-transactions" onclick="loadMoreTransactions()">Mehr laden...</button>
+                    </div>
+                `;
+            }
+
+            const scrollContainer = container?.closest('.modal-content') || container;
+            const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
+            container.innerHTML = html;
+
+            if (!resetLimit && scrollContainer) {
+                scrollContainer.scrollTop = previousScrollTop;
+            }
         }
-
-        const scrollContainer = container?.closest('.modal-content') || container;
-        const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-
-        container.innerHTML = html;
-
-        // Restore scroll position to avoid jumping when loading more
-        if (!resetLimit && scrollContainer) {
-            scrollContainer.scrollTop = previousScrollTop;
-        }
-    }
-    if (!modal?.classList.contains('show')) {
-        openModal('transaction-modal');
+    } catch (error) {
+        console.error('Error fetching transactions:', error);
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger);">Fehler beim Laden der Buchungen.</div>';
     }
 };
 
 window.loadMoreTransactions = function() {
-    transactionDisplayLimit += 150;
-    // Call with resetLimit = false to keep the increased limit and preserve scroll
+    if (!hasMoreTransactions) return;
+    setButtonLoading('btn-load-more-transactions', true, "Laden...");
+    currentTransactionPage++;
     window.showTransactionModal(false);
 };
 
@@ -2304,11 +1752,17 @@ window.addDonation = async () => {
         setButtonLoading('btn-add-donation', false);
         return;
     }
-    const newDonation = { amount: amt, name: document.getElementById('donation-name').value, date: document.getElementById('donation-date').value, id: Date.now() };
-    const nextDonations = [...donations, newDonation];
+
+    const newDonation = { amount: amt, name: document.getElementById('donation-name').value, date: document.getElementById('donation-date').value, id: Date.now().toString() };
+
     try {
-        await set(ref(db, 'donations'), { ...nextDonations });
-        donations = nextDonations;
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/donations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newDonation)
+        });
+        if (!response.ok) throw new Error('Failed to add donation');
+
         renderAll();
         closeModal('add-donation-modal');
         showToast('Spende gespeichert');
@@ -2354,13 +1808,18 @@ window.addExpense = async () => {
         issuer: issuer,
         description: desc,
         date: date,
-        id: Date.now(),
+        id: Date.now().toString(),
         receipt: receiptFilename
     };
-    const nextExpenses = [...expenses, newExpense];
+
     try {
-        await set(ref(db, 'expenses'), { ...nextExpenses });
-        expenses = nextExpenses;
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/expenses`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newExpense)
+        });
+        if (!response.ok) throw new Error('Failed to add expense');
+
         renderAll();
         closeModal('add-expense-modal');
         document.getElementById('expense-amount').value = '';
@@ -2517,10 +1976,9 @@ window.sendStatusEmail = async (personId) => {
         return;
     }
 
-    const { paidUntil, remainingCredit } = calculatePaymentStatus(person);
-    const statusMeta = calculateTimeRemaining(person, paidUntil);
-    const overdueAmount = statusMeta.isOverdue ? calculateOverdueAmount(person, paidUntil, remainingCredit) : 0;
-    const currentStatus = getCurrentStatus(person);
+    const statusMeta = person.computed?.statusMeta || { text: 'Unbekannt', isOverdue: false };
+    const overdueAmount = person.computed?.overdueAmount || 0;
+    const currentStatus = person.computed?.currentStatus || person.status;
 
     const statusLabels = {
         'vollverdiener': 'Vollverdiener',
@@ -3358,17 +2816,17 @@ window.viewRequestReceipt = async function(filename, containerId) {
 };
 
 window.findTransaction = function(id, type) {
+    if (!cachedTransactions) return null;
+
+    const t = cachedTransactions.find(x => String(x.id) === String(id) && x.type === type);
+    if (!t) return null;
+
     if (type === 'exp') {
-        const e = expenses.find(x => String(x.id) === String(id));
-        return e ? { ...e, typeName: 'Ausgabe' } : null;
+        return { ...t, typeName: 'Ausgabe' };
     } else if (type === 'don') {
-        const d = donations.find(x => String(x.id) === String(id));
-        return d ? { ...d, typeName: 'Spende', who: d.name } : null;
+        return { ...t, typeName: 'Spende' };
     } else if (type === 'pay') {
-        for (const p of people) {
-            const pay = safeList(p.payments).find(x => String(x.id) === String(id));
-            if (pay) return { ...pay, typeName: 'Zahlung', who: p.name };
-        }
+        return { ...t, typeName: 'Zahlung' };
     }
     return null;
 };
