@@ -2119,6 +2119,7 @@ window.showTransactionModal = function(resetLimit = true) {
         cachedTransactions = null; // Clear cache on reset
     }
 
+    const modal = document.getElementById('transaction-modal');
     const container = document.getElementById('full-transaction-list');
     let all = cachedTransactions;
 
@@ -2176,17 +2177,21 @@ window.showTransactionModal = function(resetLimit = true) {
             `;
         }
 
-        // Save scroll position
-        const previousScrollTop = container.scrollTop;
+        const scrollContainer = container?.closest('.modal-content') || container;
+        const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+        const previousScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
 
         container.innerHTML = html;
 
         // Restore scroll position to avoid jumping to top when loading more
-        if (!resetLimit) {
-             container.scrollTop = previousScrollTop;
+        if (!resetLimit && scrollContainer) {
+            const addedHeight = Math.max(0, scrollContainer.scrollHeight - previousScrollHeight);
+            scrollContainer.scrollTop = previousScrollTop + addedHeight;
         }
     }
-    openModal('transaction-modal');
+    if (!modal?.classList.contains('show')) {
+        openModal('transaction-modal');
+    }
 };
 
 window.loadMoreTransactions = function() {
@@ -3001,7 +3006,12 @@ window.attemptRegister = async () => {
             return;
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, email, p1, { inviteCode: code });
+        const userCredential = await createUserWithEmailAndPassword(auth, email, p1, {
+            inviteCode: code,
+            firstName: first,
+            lastName: last,
+            name: `${first} ${last}`.trim()
+        });
         const user = userCredential.user;
         // Persist basic user profile
         await set(ref(db, 'users/' + user.uid), {
