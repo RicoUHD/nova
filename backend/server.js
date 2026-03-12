@@ -35,7 +35,8 @@ const {
   syncExpenseRecords,
   listRequestRecords,
   getRequestRecord,
-  upsertRequestRecord
+  upsertRequestRecord,
+  importFirebaseData
 } = require('./pocketbase');
 
 const app = express();
@@ -966,6 +967,20 @@ app.post('/api/admin/logo', verifyToken, verifySuperAdmin, (req, res) => {
       res.status(500).json({ error: 'Failed to update logo: ' + msg });
     }
   });
+});
+
+app.post('/api/admin/firebase-import', verifyToken, verifySuperAdmin, async (req, res) => {
+  try {
+    const data = req.body?.data;
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({ error: 'Missing or invalid import data' });
+    }
+    const results = await importFirebaseData(appConfig, data);
+    res.json({ success: true, imported: results });
+  } catch (error) {
+    console.error('Firebase import failed:', error);
+    res.status(500).json({ error: 'Import failed: ' + (error.message || 'Unknown error') });
+  }
 });
 
 app.post('/api/upload', protectedActionRateLimit, verifyToken, upload.single('receipt'), (req, res) => {
