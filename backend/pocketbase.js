@@ -21,6 +21,10 @@ const DEFAULT_SYSTEM_STATE = {
 
 const MIGRATION_BATCH_SIZE = 10;
 
+const SUPERUSER_TOKEN_TTL_MS = 300_000; // 5 minutes
+let cachedSuperuserToken = null;
+let cachedSuperuserTokenExpiry = 0;
+
 const DEFAULT_COLLECTION_SPECS = [
   {
     name: 'people',
@@ -282,6 +286,11 @@ async function authenticateSuperuser(appConfig) {
     throw new Error('PocketBase superuser credentials are missing.');
   }
 
+  const now = Date.now();
+  if (cachedSuperuserToken && now < cachedSuperuserTokenExpiry) {
+    return cachedSuperuserToken;
+  }
+
   const auth = await pocketBaseRequest('/api/collections/_superusers/auth-with-password', {
     method: 'POST',
     body: {
@@ -290,7 +299,14 @@ async function authenticateSuperuser(appConfig) {
     }
   });
 
+  cachedSuperuserToken = auth.token;
+  cachedSuperuserTokenExpiry = now + SUPERUSER_TOKEN_TTL_MS;
   return auth.token;
+}
+
+function clearSuperuserTokenCache() {
+  cachedSuperuserToken = null;
+  cachedSuperuserTokenExpiry = 0;
 }
 
 async function ensurePocketBaseSuperuser(appConfig) {
@@ -657,22 +673,27 @@ async function syncCollectionRecords(collectionName, keyField, existingRecords, 
   const existingByKey = new Map(existingRecords.map((record) => [record[keyField], record]));
   const nextKeys = new Set();
 
+  const upsertOps = [];
   for (const payload of nextPayloads) {
     const key = payload[keyField];
     nextKeys.add(key);
     const existing = existingByKey.get(key);
     if (existing) {
-      await updateRecord(collectionName, existing.id, payload, appConfig);
+      upsertOps.push(updateRecord(collectionName, existing.id, payload, appConfig));
     } else {
-      await createRecord(collectionName, payload, appConfig);
+      upsertOps.push(createRecord(collectionName, payload, appConfig));
     }
   }
 
+  const deleteOps = [];
   for (const record of existingRecords) {
     if (!nextKeys.has(record[keyField])) {
-      await deleteRecord(collectionName, record.id, appConfig);
+      deleteOps.push(deleteRecord(collectionName, record.id, appConfig));
     }
   }
+
+  await Promise.all(upsertOps);
+  await Promise.all(deleteOps);
 }
 
 async function listChildRecordsForPeople(collectionName, personKeys, appConfig) {
@@ -685,28 +706,37 @@ async function listChildRecordsForPeople(collectionName, personKeys, appConfig) 
   return records.filter((record) => allowedKeys.has(String(record.personKey)));
 }
 
-async function syncPeopleChildRecords(appConfig, personKey, value) {
+async function syncPeopleChildRecords(appConfig, personKey, value, existingChildren) {
   const normalizedPayments = normalizeRecordListInput(value?.payments);
   const normalizedStatusHistory = normalizeRecordListInput(value?.statusHistory);
-  const [existingPayments, existingStatusHistory] = await Promise.all([
-    listAllRecords('payments', pbFilterEquals('personKey', personKey), appConfig),
-    listAllRecords('status_history', pbFilterEquals('personKey', personKey), appConfig)
-  ]);
+  let existingPayments;
+  let existingStatusHistory;
+  if (existingChildren) {
+    existingPayments = existingChildren.payments;
+    existingStatusHistory = existingChildren.statusHistory;
+  } else {
+    [existingPayments, existingStatusHistory] = await Promise.all([
+      listAllRecords('payments', pbFilterEquals('personKey', personKey), appConfig),
+      listAllRecords('status_history', pbFilterEquals('personKey', personKey), appConfig)
+    ]);
+  }
 
-  await syncCollectionRecords(
-    'payments',
-    'paymentKey',
-    existingPayments,
-    normalizedPayments.map((payment, index) => buildPaymentRecordPayload(personKey, payment, index)),
-    appConfig
-  );
-  await syncCollectionRecords(
-    'status_history',
-    'historyKey',
-    existingStatusHistory,
-    normalizedStatusHistory.map((entry, index) => buildStatusHistoryRecordPayload(personKey, entry, index)),
-    appConfig
-  );
+  await Promise.all([
+    syncCollectionRecords(
+      'payments',
+      'paymentKey',
+      existingPayments,
+      normalizedPayments.map((payment, index) => buildPaymentRecordPayload(personKey, payment, index)),
+      appConfig
+    ),
+    syncCollectionRecords(
+      'status_history',
+      'historyKey',
+      existingStatusHistory,
+      normalizedStatusHistory.map((entry, index) => buildStatusHistoryRecordPayload(personKey, entry, index)),
+      appConfig
+    )
+  ]);
 }
 
 async function migrateLegacyPeopleData(appConfig) {
@@ -908,6 +938,8 @@ async function getPeopleRecord(appConfig, personKey) {
   ]);
   return {
     ...record,
+    _childPayments: payments,
+    _childStatusHistory: statusHistory,
     data: hydratePersonRecord(record, payments, statusHistory)
   };
 }
@@ -942,8 +974,12 @@ async function upsertPeopleRecord(appConfig, personKey, value, expectedUpdated =
       error.status = 409;
       throw error;
     }
+    const existingChildren = {
+      payments: existing._childPayments || [],
+      statusHistory: existing._childStatusHistory || []
+    };
     await updateRecord('people', existing.id, buildPersonRecordPayload(personKey, value), appConfig);
-    await syncPeopleChildRecords(appConfig, personKey, value);
+    await syncPeopleChildRecords(appConfig, personKey, value, existingChildren);
     return getPeopleRecord(appConfig, personKey);
   }
   if (expectedUpdated) {
@@ -952,7 +988,7 @@ async function upsertPeopleRecord(appConfig, personKey, value, expectedUpdated =
     throw error;
   }
   await createRecord('people', buildPersonRecordPayload(personKey, value), appConfig);
-  await syncPeopleChildRecords(appConfig, personKey, value);
+  await syncPeopleChildRecords(appConfig, personKey, value, { payments: [], statusHistory: [] });
   return getPeopleRecord(appConfig, personKey);
 }
 
@@ -1023,6 +1059,7 @@ module.exports = {
   buildStatusHistoryRecordPayload,
   buildExpenseRecordPayload,
   hydratePersonRecord,
+  clearSuperuserTokenCache,
   getPocketBaseBaseUrl,
   getPocketBaseBinaryPath,
   getPocketBaseDataDir,

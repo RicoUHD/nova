@@ -2179,14 +2179,12 @@ window.showTransactionModal = function(resetLimit = true) {
 
         const scrollContainer = container?.closest('.modal-content') || container;
         const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
-        const previousScrollHeight = scrollContainer ? scrollContainer.scrollHeight : 0;
 
         container.innerHTML = html;
 
-        // Restore scroll position to avoid jumping to top when loading more
+        // Restore scroll position to avoid jumping when loading more
         if (!resetLimit && scrollContainer) {
-            const addedHeight = Math.max(0, scrollContainer.scrollHeight - previousScrollHeight);
-            scrollContainer.scrollTop = previousScrollTop + addedHeight;
+            scrollContainer.scrollTop = previousScrollTop;
         }
     }
     if (!modal?.classList.contains('show')) {
