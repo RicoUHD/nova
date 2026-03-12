@@ -13,7 +13,8 @@ const {
   buildPaymentRecordPayload,
   buildStatusHistoryRecordPayload,
   buildExpenseRecordPayload,
-  hydratePersonRecord
+  hydratePersonRecord,
+  clearSuperuserTokenCache
 } = require('./pocketbase');
 
 test('normalizeDataPath trims duplicate separators', () => {
@@ -192,4 +193,28 @@ test('hydratePersonRecord rebuilds normalized child collections into legacy API 
     ],
     totalPaid: 16
   });
+});
+
+test('clearSuperuserTokenCache is a callable function', () => {
+  assert.equal(typeof clearSuperuserTokenCache, 'function');
+  // Calling it should not throw
+  clearSuperuserTokenCache();
+});
+
+test('hydratePersonRecord attaches _childPayments/_childStatusHistory-compatible data', () => {
+  const record = {
+    personKey: 'person-1',
+    name: 'Test',
+    status: 'active',
+    memberSince: '2024-01-01',
+    data: { id: 'person-1' }
+  };
+  const payments = [
+    buildPaymentRecordPayload('person-1', { id: 'pay-1', amount: '5.00', date: '2024-01-15', description: 'Fee' })
+  ];
+  const result = hydratePersonRecord(record, payments, []);
+
+  assert.equal(result.payments.length, 1);
+  assert.equal(result.payments[0].id, 'pay-1');
+  assert.equal(result.totalPaid, 5);
 });
