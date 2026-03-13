@@ -770,6 +770,79 @@ input:checked + .slider:before { transform: translateX(22px); }
     background-color: rgba(239, 68, 68, 0.05) !important;
 }
 
+/* --- Super Admin Zone --- */
+.super-admin-zone {
+    border: 2px solid rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.02);
+    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.1);
+}
+
+.super-admin-header {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
+    color: var(--danger);
+    padding: 15px 20px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.super-admin-body {
+    padding: 20px;
+}
+
+.super-admin-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+.super-admin-group:last-child {
+    margin-bottom: 0;
+}
+
+.super-admin-group-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.super-admin-group-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+.super-admin-input {
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.super-admin-input:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.super-admin-btn {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    font-weight: 700;
+}
+.super-admin-btn:hover {
+    background: var(--danger);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
 /* --- User View UI Improvements --- */
 .user-hero-status {
     background: var(--surface);
