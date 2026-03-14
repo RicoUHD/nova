@@ -276,13 +276,13 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPG, PNG, WEBP, and GIF are allowed.'));
+      cb(new Error('Invalid file type. Only JPG, PNG, WEBP, GIF, HEIC, and HEIF are allowed.'));
     }
   }
 });
@@ -1022,7 +1022,7 @@ app.post('/api/upload', protectedActionRateLimit, verifyToken, (req, res) => {
   upload.single('receipt')(req, res, (error) => {
     if (error) {
       if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File too large (max 5MB)' });
+        return res.status(400).json({ error: 'File too large (max 50MB)' });
       }
       return res.status(400).json({ error: error.message || 'File upload failed' });
     }
