@@ -13,6 +13,7 @@ const cron = require('node-cron');
 const { runAutomatedStandingOrders } = require('./standingOrders');
 const { aggregateStats } = require('./stats');
 const { scheduleBackup } = require('./backup');
+const { extractBackupArchive } = require('./backupRestore');
 
 // Make scheduleBackup globally available so the system-config PUT endpoint can call it
 global.scheduleBackup = scheduleBackup;
@@ -997,7 +998,6 @@ app.put('/api/admin/users/:uid/admin', verifyToken, verifySuperAdmin, async (req
   }
 });
 
-const unzipper = require('unzipper');
 const { resolveBackupDirectory, resolvePocketBaseDirectory } = require('./pathConfig');
 
 app.get('/api/admin/backups', verifyToken, verifySuperAdmin, async (req, res) => {
@@ -1041,27 +1041,11 @@ app.post('/api/admin/backups/rebuild', verifyToken, verifySuperAdmin, async (req
 
     await fs.promises.mkdir(restoreDbDir, { recursive: true });
 
-    // Extract backup
-    const zip = fs.createReadStream(backupPath).pipe(unzipper.Parse({ forceStream: true }));
-    for await (const entry of zip) {
-      const fileName = entry.path;
-      if (fileName.startsWith('db/')) {
-        const dest = path.join(restoreDbDir, fileName.substring(3));
-        const destDir = path.dirname(dest);
-        if (!fs.existsSync(destDir)) {
-          await fs.promises.mkdir(destDir, { recursive: true });
-        }
-        if (entry.type === 'Directory') {
-          entry.autodrain();
-        } else {
-          entry.pipe(fs.createWriteStream(dest));
-        }
-      } else if (fileName === 'config.json') {
-        entry.pipe(fs.createWriteStream(configRestorePath));
-      } else {
-        entry.autodrain();
-      }
-    }
+    await extractBackupArchive({
+      backupPath,
+      restoreDbDir,
+      configRestorePath
+    });
 
     // Acknowledge the request before killing the server
     res.json({ success: true, message: 'Restore initiated. Server restarting...' });
