@@ -16,6 +16,10 @@ function formatFailure(result) {
   return `exit=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }
 
+function writeExecutable(filePath, content) {
+  fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
 test('docker entrypoint populates an empty frontend directory from the seed copy', () => {
   const tempRoot = makeTempDir();
   try {
@@ -191,6 +195,67 @@ test('docker entrypoint supports a dedicated PocketBase database directory', () 
 
     assert.equal(result.status, 0, formatFailure(result));
     assert.equal(fs.existsSync(dbDir), true);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('docker entrypoint recursively assigns runtime ownership to existing PocketBase files', () => {
+  const tempRoot = makeTempDir();
+  try {
+    const dataDir = path.join(tempRoot, 'data');
+    const dbDir = path.join(tempRoot, 'db');
+    const frontendDir = path.join(tempRoot, 'html');
+    const seedDir = path.join(tempRoot, 'html-seed');
+    const fakeBinDir = path.join(tempRoot, 'fake-bin');
+    const chownLog = path.join(tempRoot, 'chown.log');
+
+    fs.mkdirSync(path.join(dbDir, 'backups'), { recursive: true });
+    fs.writeFileSync(path.join(dbDir, 'backups', 'restore.zip'), 'backup');
+    fs.mkdirSync(seedDir, { recursive: true });
+    fs.writeFileSync(path.join(seedDir, 'index.html'), '<!doctype html>');
+    fs.mkdirSync(fakeBinDir, { recursive: true });
+
+    writeExecutable(path.join(fakeBinDir, 'id'), `#!/bin/sh
+if [ "$1" = "-u" ]; then
+  echo 0
+  exit 0
+fi
+exec /usr/bin/id "$@"
+`);
+    writeExecutable(path.join(fakeBinDir, 'su'), `#!/bin/sh
+while [ "$1" != "-c" ] && [ "$#" -gt 0 ]; do
+  shift
+done
+shift
+cmd="$1"
+shift
+if [ "$1" = "--" ]; then
+  shift
+fi
+exec /bin/sh -c "$cmd" "$@"
+`);
+    writeExecutable(path.join(fakeBinDir, 'chown'), `#!/bin/sh
+echo "$*" >> "$CHOWN_LOG"
+exit 0
+`);
+
+    const result = spawnSync(entrypoint, ['/bin/sh', '-c', 'exit 0'], {
+      env: {
+        ...process.env,
+        DATA_DIR: dataDir,
+        DB_DIR: dbDir,
+        FRONTEND_DIR: frontendDir,
+        FRONTEND_SEED_DIR: seedDir,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+        CHOWN_LOG: chownLog
+      },
+      encoding: 'utf8'
+    });
+
+    assert.equal(result.status, 0, formatFailure(result));
+    const chownCalls = fs.readFileSync(chownLog, 'utf8');
+    assert.match(chownCalls, new RegExp(`-R node:node ${dbDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

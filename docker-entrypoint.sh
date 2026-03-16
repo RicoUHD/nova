@@ -52,8 +52,8 @@ ensure_writable_dir() {
     mkdir -p "$dir"
 
     if [ "$(id -u)" -eq 0 ]; then
-        if ! chown "$runtime_user":"$runtime_user" "$dir"; then
-            echo "Error: ${label} directory '$dir' could not be assigned to ${runtime_user}." >&2
+        if ! chown -R "$runtime_user":"$runtime_user" "$dir"; then
+            echo "Error: ${label} directory '$dir' and its contents could not be assigned to ${runtime_user}." >&2
             echo "Please update the host volume permissions for the mapped path and restart the container." >&2
             exit 1
         fi
