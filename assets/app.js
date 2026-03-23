@@ -323,6 +323,15 @@ window.closeModal = (id, fromPopstate = false) => {
         try { returnFocus.focus(); } catch(e){}
     }
     delete modal._returnFocusTo;
+
+    // Re-show the previous modal in the stack if one exists
+    if (window._modalStack && window._modalStack.length > 0) {
+        const prevModalId = window._modalStack[window._modalStack.length - 1];
+        const prevModal = document.getElementById(prevModalId);
+        if (prevModal) {
+            prevModal.classList.add('show');
+        }
+    }
 };
 
 // Web History API event listener for system back gesture
@@ -3400,7 +3409,10 @@ window.showTransactionDetails = async function(id, type) {
     const item = window.findTransaction(id, type);
     if (!item) return;
 
-    closeModal('transaction-modal'); // Hide the list
+    // Hide the list visually without modifying the stack
+    const listModal = document.getElementById('transaction-modal');
+    if (listModal) listModal.classList.remove('show');
+
     openModal('transaction-details-modal');
     const content = document.getElementById('transaction-details-content');
 
