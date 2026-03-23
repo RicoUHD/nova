@@ -2172,7 +2172,7 @@ window.showTransactionModal = async function(resetLimit = true) {
     const container = document.getElementById('full-transaction-list');
 
     if (resetLimit) {
-        const skeletonHtml = Array(6).fill(`
+        const skeletonHtml = Array(15).fill(`
             <div class="trans-item" style="pointer-events: none; border-bottom: 1px solid var(--border);">
                 <div class="trans-left" style="gap: 6px;">
                     <div class="skeleton" style="width: 140px; height: 16px;"></div>
