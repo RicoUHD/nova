@@ -158,10 +158,6 @@ body { background-color: var(--bg); color: var(--text); min-height: 100vh; paddi
     box-shadow: var(--shadow); border: 1px solid var(--border);
     margin-bottom: 20px; overflow: hidden; transition: all 0.3s ease;
 }
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
-}
 .card-settings { padding: 0; }
 .card-header {
     padding: 20px 20px 5px; /* Increased top padding, reduced bottom */
@@ -207,11 +203,6 @@ body { background-color: var(--bg); color: var(--text); min-height: 100vh; paddi
     position: relative;
     z-index: 2;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.person-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 /* Active state for the main card */
@@ -356,7 +347,6 @@ body { background-color: var(--bg); color: var(--text); min-height: 100vh; paddi
 .btn:active { transform: scale(0.95); }
 .btn-block { width: 100%; }
 .btn-primary { background: linear-gradient(90deg, #06b6d4 0%, #10b981 100%); color: white; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
-.btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .btn-secondary { background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); }
 .btn-secondary.active { background: rgba(6, 182, 212, 0.1); color: var(--primary); border-color: var(--primary); }
 .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
@@ -654,11 +644,6 @@ input:checked + .slider:before { transform: translateX(22px); }
     transition: all 0.2s;
 }
 
-.nav-btn:hover {
-    color: var(--primary);
-    background: var(--surface-alt);
-}
-
 .nav-btn.active {
     color: var(--primary);
     background: rgba(6, 182, 212, 0.1);
@@ -798,7 +783,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     align-items: center;
     justify-content: center;
 }
-.close-btn:hover, .close-btn:focus {
+.close-btn:focus {
     color: var(--danger);
     outline: none;
 }
@@ -896,12 +881,6 @@ input:checked + .slider:before { transform: translateX(22px); }
     border: 1px solid rgba(239, 68, 68, 0.2);
     font-weight: 700;
 }
-.super-admin-btn:hover {
-    background: var(--danger);
-    color: white;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-}
 
 /* --- User View UI Improvements --- */
 .user-hero-status {
@@ -945,11 +924,6 @@ input:checked + .slider:before { transform: translateX(22px); }
     height: 32px;
     stroke: var(--text-secondary);
     transition: 0.2s;
-}
-
-.user-action-btn:hover .user-action-icon svg {
-    stroke: var(--primary);
-    transform: scale(1.1);
 }
 
 .user-action-label {
@@ -1067,5 +1041,4 @@ input:checked + .slider:before { transform: translateX(22px); }
     justify-content: center;
     z-index: 2;
 }
-.password-toggle:hover { color: var(--primary); }
 .form-input.has-toggle { padding-right: 40px; }
