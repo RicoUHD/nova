@@ -1216,7 +1216,7 @@ function renderAdminRequests() {
             const sorted = items.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             return `
                 <div style="margin-top: 12px;">
-                    <div style="font-weight: 900; margin-bottom: 6px;">${personName}</div>
+                    <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(personName)}</div>
                     ${sorted.map(renderReq).join('')}
                 </div>
             `;
