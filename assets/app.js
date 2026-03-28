@@ -2091,7 +2091,7 @@ function generatePersonHTML(p, preCalcData = null) {
                         </button>
                         <div class="secondary-actions">
                             <button class="btn btn-secondary" onclick="openChangeStatusModal('${p.id}')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 0 3.84-10.36L2 8"></path><polyline points="21.5 2 21.5 8 15.5 8"></polyline></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                                 Status
                             </button>
                             <button class="btn btn-secondary" onclick="sendStatusEmail('${p.id}')">
