@@ -1134,8 +1134,10 @@ async function loadData() {
         if (config.aiEnabled && currentUser.superAdmin) {
             const btnDesktop = document.getElementById('btn-ai-desktop');
             const btnMobile = document.getElementById('btn-ai-mobile');
+            const btnMobileDummy = document.getElementById('btn-ai-mobile-dummy');
             if (btnDesktop) btnDesktop.style.display = '';
             if (btnMobile) btnMobile.style.display = 'flex';
+            if (btnMobileDummy) btnMobileDummy.style.display = 'flex';
         }
     }
 

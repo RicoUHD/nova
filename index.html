@@ -421,18 +421,22 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         <span>Übersicht</span>
     </button>
+    <button id="btn-ai-mobile" class="nav-item" onclick="switchTab('ai-assistant', this)" style="display:none;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2m0 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6m-2 4h4m-4 4h4m-7 3v-2c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2v2"></path></svg>
+        <span>KI</span>
+    </button>
     <div class="nav-center">
         <button class="nav-fab" onclick="toggleFab()" aria-label="Aktionsmenü öffnen" aria-expanded="false" aria-haspopup="true" aria-controls="fabMenu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </button>
     </div>
+    <button id="btn-ai-mobile-dummy" class="nav-item" style="display:none; pointer-events:none; visibility:hidden;" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24"></svg>
+        <span>_</span>
+    </button>
     <button class="nav-item" onclick="switchTab('settings', this)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span>Einstellungen</span>
-    </button>
-    <button id="btn-ai-mobile" class="nav-item" onclick="switchTab('ai-assistant', this)" style="display:none;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2m0 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6m-2 4h4m-4 4h4m-7 3v-2c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2v2"></path></svg>
-        <span>KI</span>
     </button>
 </nav>
 
