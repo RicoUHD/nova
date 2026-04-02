@@ -205,6 +205,7 @@ function validateRequired(ids) {
 document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     checkAuth();
+    updateAiNavigation();
 
     const today = new Date().toISOString().split('T')[0];
     ['payment-date', 'donation-date', 'expense-date', 'change-status-date', 'new-person-start'].forEach(id => {
@@ -1191,10 +1192,12 @@ async function renderSuperAdminTools() {
 
     if (!isSuperAdminUser()) {
         card.style.display = 'none';
+        updateAiNavigation();
         return;
     }
 
     card.style.display = '';
+    updateAiNavigation();
     renderSuperAdminUserManagement();
     await renderSuperAdminPaymentEditor();
     if (!advancedConfigLoaded) {
@@ -2767,6 +2770,14 @@ async function loadAdvancedSystemConfig() {
         document.getElementById('super-admin-smtp-secure').checked = !!data.smtp?.secure;
         document.getElementById('super-admin-smtp-user').value = data.smtp?.user || '';
         document.getElementById('super-admin-smtp-pass').value = data.smtp?.pass || '';
+
+        if (data.ai) {
+            document.getElementById('super-admin-ai-enabled').checked = !!data.ai.enabled;
+            document.getElementById('super-admin-ai-base-url').value = data.ai.baseUrl || '';
+            document.getElementById('super-admin-ai-api-key').value = data.ai.apiKey || '';
+            document.getElementById('super-admin-ai-model').value = data.ai.model || '';
+        }
+
         advancedConfigLoaded = true;
     } catch (err) {
         console.error('Fehler beim Laden der erweiterten Konfiguration:', err);
@@ -2782,9 +2793,20 @@ window.saveAdvancedSystemConfig = async () => {
             throw new Error('App-Name konnte nicht ermittelt werden. Dies kann auf fehlende Konfigurationsdaten hinweisen. Bitte Seite neu laden.');
         }
 
+        const aiEnabled = document.getElementById('super-admin-ai-enabled').checked;
+        const aiBaseUrl = document.getElementById('super-admin-ai-base-url').value.trim();
+        const aiApiKey = document.getElementById('super-admin-ai-api-key').value.trim();
+        const aiModel = document.getElementById('super-admin-ai-model').value.trim();
+
         const payload = {
             appName,
-            smtp: null
+            smtp: null,
+            ai: {
+                enabled: aiEnabled,
+                baseUrl: aiBaseUrl,
+                apiKey: aiApiKey,
+                model: aiModel
+            }
         };
 
         const smtpHost = document.getElementById('super-admin-smtp-host').value.trim();
@@ -2800,6 +2822,10 @@ window.saveAdvancedSystemConfig = async () => {
             if (!payload.smtp.port || Number.isNaN(payload.smtp.port)) {
                 throw new Error('SMTP Port ist ungültig.');
             }
+        }
+
+        if (aiEnabled && (!aiBaseUrl || !aiApiKey || !aiModel)) {
+            throw new Error('Wenn die KI aktiviert ist, müssen Base URL, API Key und Model Name ausgefüllt sein.');
         }
 
         const response = await fetchWithAuth(`${config.apiBaseUrl}/admin/system-config`, {
@@ -2820,6 +2846,11 @@ window.saveAdvancedSystemConfig = async () => {
         }
         advancedConfigAppName = appName;
         showToast('System-Konfiguration gespeichert');
+
+        // Update local config value so UI elements show/hide immediately
+        config.aiEnabled = aiEnabled;
+        updateAiNavigation();
+
     } catch (err) {
         console.error('Fehler beim Speichern der erweiterten Konfiguration:', err);
         alert(`Erweiterte Konfiguration konnte nicht gespeichert werden: ${err.message || 'Unbekannter Fehler'}`);
@@ -3556,6 +3587,97 @@ window.showTransactionDetails = async function(id, type) {
         document.getElementById('receipt-container').innerHTML = `<div style="color:var(--text-secondary); text-align:center; font-size:0.9rem;">Kein Beleg vorhanden.</div>`;
     }
 };
+
+function updateAiNavigation() {
+    const isAnyAdmin = !!(currentUser && (currentUser.admin || currentUser.superAdmin));
+    if (isAnyAdmin && config.aiEnabled) {
+        document.getElementById('nav-btn-ai').style.display = '';
+        document.getElementById('nav-item-ai').style.display = 'flex';
+        document.getElementById('nav-spacer-ai').style.display = 'flex';
+    } else {
+        document.getElementById('nav-btn-ai').style.display = 'none';
+        document.getElementById('nav-item-ai').style.display = 'none';
+        document.getElementById('nav-spacer-ai').style.display = 'none';
+    }
+}
+
+let aiChatHistory = [];
+
+window.sendAiChatMessage = async function(event) {
+    event.preventDefault();
+    const input = document.getElementById('ai-chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+
+    const messagesContainer = document.getElementById('ai-chat-messages');
+
+    const userMsgDiv = document.createElement('div');
+    userMsgDiv.style.alignSelf = 'flex-end';
+    userMsgDiv.style.background = 'var(--primary)';
+    userMsgDiv.style.color = 'white';
+    userMsgDiv.style.padding = '10px 14px';
+    userMsgDiv.style.borderRadius = '14px 14px 0 14px';
+    userMsgDiv.style.maxWidth = '85%';
+    userMsgDiv.innerText = msg;
+    messagesContainer.appendChild(userMsgDiv);
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    aiChatHistory.push({ role: 'user', content: msg });
+
+    const loadingDiv = document.createElement('div');
+    loadingDiv.style.alignSelf = 'flex-start';
+    loadingDiv.style.color = 'var(--text-secondary)';
+    loadingDiv.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>';
+    messagesContainer.appendChild(loadingDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/ai/chat`, {
+            method: 'POST',
+            body: JSON.stringify({ messages: aiChatHistory })
+        });
+
+        messagesContainer.removeChild(loadingDiv);
+
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        const data = await response.json();
+        const aiResponse = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+
+        aiChatHistory.push({ role: 'assistant', content: aiResponse });
+
+        const aiMsgDiv = document.createElement('div');
+        aiMsgDiv.style.alignSelf = 'flex-start';
+        aiMsgDiv.style.background = 'var(--surface-alt)';
+        aiMsgDiv.style.border = '1px solid var(--border)';
+        aiMsgDiv.style.padding = '10px 14px';
+        aiMsgDiv.style.borderRadius = '14px 14px 14px 0';
+        aiMsgDiv.style.maxWidth = '85%';
+        aiMsgDiv.style.whiteSpace = 'pre-wrap';
+        aiMsgDiv.innerText = aiResponse;
+        messagesContainer.appendChild(aiMsgDiv);
+
+    } catch (err) {
+        if (messagesContainer.contains(loadingDiv)) {
+            messagesContainer.removeChild(loadingDiv);
+        }
+        console.error('AI Chat Error:', err);
+        const errorDiv = document.createElement('div');
+        errorDiv.style.alignSelf = 'center';
+        errorDiv.style.color = 'var(--danger)';
+        errorDiv.style.fontSize = '0.9rem';
+        errorDiv.innerText = 'Fehler bei der Kommunikation mit der KI.';
+        messagesContainer.appendChild(errorDiv);
+    }
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+};
+
 
 // --- PWA Install Logic ---
 let deferredPrompt;

@@ -175,7 +175,8 @@ app.get('/assets/config.js', async (req, res) => {
   const jsConfig = `
 export const config = {
     apiBaseUrl: window.location.origin + "/api",
-    appName: ${JSON.stringify(appConfig.appName)}
+    appName: ${JSON.stringify(appConfig.appName)},
+    aiEnabled: ${appConfig.ai?.enabled === true}
 };
 `;
   res.setHeader('Content-Type', 'application/javascript');
@@ -918,8 +919,89 @@ app.get('/api/admin/system-config', verifyToken, verifySuperAdmin, async (req, r
   res.json({
     appName: appConfig.appName,
     smtp: appConfig.smtp || null,
+    ai: {
+      enabled: appConfig.ai?.enabled || false,
+      baseUrl: appConfig.ai?.baseUrl || '',
+      apiKey: appConfig.ai?.apiKey || '',
+      model: appConfig.ai?.model || ''
+    },
     usesPocketBase: true
   });
+});
+
+app.post('/api/ai/chat', verifyToken, async (req, res) => {
+  try {
+    if (!req.user.admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    if (!appConfig.ai?.enabled) {
+      return res.status(400).json({ error: 'AI features are not enabled' });
+    }
+
+    const { messages } = req.body;
+    if (!Array.isArray(messages)) {
+      return res.status(400).json({ error: 'messages array is required' });
+    }
+
+    // Prepare read-only context (summarized)
+    const [people, expenses, statsObj] = await Promise.all([
+      listPeopleRecords(appConfig),
+      listExpenseRecords(appConfig),
+      aggregateStats(appConfig)
+    ]);
+
+    const dbContext = {
+      summary: "Dies ist ein read-only Snapshot der Datenbank.",
+      peopleCount: people.length,
+      expensesCount: expenses.length,
+      stats: statsObj,
+      // Sample of people for context, limit to avoid token limits
+      samplePeople: people.slice(0, 10).map(p => ({
+        name: p.data?.name || 'Unknown',
+        role: p.data?.role || 'user',
+        totalPaid: p.data?.totalPaid || 0,
+        status: p.data?.status || 'unknown'
+      }))
+    };
+
+    const systemMessage = {
+      role: 'system',
+      content: \`Du bist ein hilfreicher KI-Assistent für das System 'Nova'. Du hast reinen Lesezugriff auf die aktuelle Datenbank-Zusammenfassung:
+\${JSON.stringify(dbContext, null, 2)}
+Bitte antworte kurz, prägnant und hilfreich auf Fragen zum System oder den Daten.\`
+    };
+
+    const apiMessages = [systemMessage, ...messages];
+
+    const baseUrl = appConfig.ai.baseUrl;
+    const apiKey = appConfig.ai.apiKey;
+    const model = appConfig.ai.model;
+
+    const response = await fetch(\`\${baseUrl}/v1/chat/completions\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${apiKey}\`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: apiMessages
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI API Error:', errorText);
+      return res.status(response.status).json({ error: 'AI API request failed' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('AI Chat Error:', error);
+    res.status(500).json({ error: 'Failed to process AI chat request' });
+  }
 });
 
 app.put('/api/admin/system-config', verifyToken, verifySuperAdmin, async (req, res) => {
@@ -940,10 +1022,21 @@ app.put('/api/admin/system-config', verifyToken, verifySuperAdmin, async (req, r
       };
     }
 
+    let ai = null;
+    if (req.body?.ai && typeof req.body.ai === 'object') {
+      ai = {
+        enabled: req.body.ai.enabled === true,
+        baseUrl: String(req.body.ai.baseUrl || '').trim(),
+        apiKey: String(req.body.ai.apiKey || '').trim(),
+        model: String(req.body.ai.model || '').trim()
+      };
+    }
+
     const newConfig = {
       ...appConfig,
       appName,
-      smtp
+      smtp,
+      ai
     };
 
     // ⚡ Bolt Performance Optimization:

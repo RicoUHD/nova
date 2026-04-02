@@ -37,6 +37,7 @@
         <nav id="admin-desktop-nav" class="desktop-nav">
             <button class="nav-btn active" onclick="switchTab('overview', this)">Startseite</button>
             <button class="nav-btn" onclick="switchTab('settings', this)">Einstellungen</button>
+            <button class="nav-btn" id="nav-btn-ai" style="display:none;" onclick="switchTab('ai-chat', this)">KI Chat</button>
         </nav>
 
         <div id="overview" class="tab-content active" role="tabpanel" aria-labelledby="tab-btn-overview">
@@ -253,7 +254,56 @@
                             </div>
                         </div>
 
+                        <div style="font-weight:700; margin-bottom:15px; margin-top: 25px; font-size: 1rem;">KI Assistent (OpenAI API kompatibel)</div>
+
+                        <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-bottom: 15px;">
+                            <label class="switch" style="flex-shrink: 0;">
+                                <input type="checkbox" id="super-admin-ai-enabled">
+                                <span class="slider"></span>
+                            </label>
+                            <label for="super-admin-ai-enabled" style="margin:0; font-weight:600; cursor:pointer;">KI aktivieren</label>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="super-admin-ai-base-url" style="color: var(--text-secondary);">Base URL (z.B. https://api.openai.com)</label>
+                            <input type="text" id="super-admin-ai-base-url" class="form-input super-admin-input" placeholder="https://api.openai.com">
+                        </div>
+
+                        <div class="settings-flex-row">
+                            <div class="form-group" style="flex: 2; min-width: 150px;">
+                                <label class="form-label" for="super-admin-ai-api-key" style="color: var(--text-secondary);">API Key</label>
+                                <input type="password" id="super-admin-ai-api-key" class="form-input super-admin-input" placeholder="sk-...">
+                            </div>
+                            <div class="form-group" style="flex: 1; min-width: 100px;">
+                                <label class="form-label" for="super-admin-ai-model" style="color: var(--text-secondary);">Model Name</label>
+                                <input type="text" id="super-admin-ai-model" class="form-input super-admin-input" placeholder="gpt-4o-mini">
+                            </div>
+                        </div>
+
                         <button class="btn btn-block super-admin-btn" style="margin-top: 15px;" onclick="saveAdvancedSystemConfig()">Erweiterte System-Konfiguration speichern</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Chat View -->
+            <div id="ai-chat" class="tab-content" role="tabpanel" aria-labelledby="nav-btn-ai">
+                <div class="card" style="height: calc(100vh - 140px); display: flex; flex-direction: column; overflow: hidden; margin-bottom: 0;">
+                    <div class="card-header" style="flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><path d="M12 8V4H8"></path><rect x="4" y="8" width="16" height="12" rx="2" ry="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+                        KI Assistent (Nur Lesen)
+                    </div>
+                    <div class="card-body" id="ai-chat-messages" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding: 15px;">
+                        <div style="text-align: center; color: var(--text-secondary); margin-top: auto; margin-bottom: auto;">
+                            Stellen Sie Fragen zur Datenbank oder den Systemdaten.
+                        </div>
+                    </div>
+                    <div style="padding: 15px; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--surface);">
+                        <form id="ai-chat-form" style="display: flex; gap: 10px;" onsubmit="sendAiChatMessage(event)">
+                            <input type="text" id="ai-chat-input" class="form-input" placeholder="Nachricht an KI..." style="flex: 1; margin: 0;" required>
+                            <button type="submit" class="btn btn-primary" id="ai-chat-submit" style="margin: 0; padding: 0 15px;" aria-label="Senden">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -401,6 +451,10 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         <span>Übersicht</span>
     </button>
+    <button class="nav-item" id="nav-item-ai" style="display:none;" onclick="switchTab('ai-chat', this)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect x="4" y="8" width="16" height="12" rx="2" ry="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+        <span>KI Chat</span>
+    </button>
     <div class="nav-center">
         <button class="nav-fab" onclick="toggleFab()" aria-label="Aktionsmenü öffnen" aria-expanded="false" aria-haspopup="true" aria-controls="fabMenu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -410,6 +464,7 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span>Einstellungen</span>
     </button>
+    <button class="nav-item" id="nav-spacer-ai" style="display:none; visibility:hidden; flex:1"></button>
 </nav>
 
 <nav id="user-bottom-nav" class="bottom-nav" style="display:none;">
