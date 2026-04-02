@@ -58,6 +58,11 @@ const configFile = path.join(dataDir, 'config.json');
 const resolvedFrontendDir = resolveFrontendDirectory();
 const bundledChurchLogoFile = path.join(resolvedFrontendDir, 'assets', 'church-logo.svg');
 const churchLogoFile = path.join(dataDir, 'church-logo.svg');
+const DEFAULT_ALLOWED_AI_BASE_URLS = [
+  'https://api.openai.com',
+  'https://openrouter.ai/api',
+  'http://host.docker.internal:11434'
+];
 
 let appConfig = null;
 let setupMode = true;
@@ -384,6 +389,50 @@ function validateSetupPayload(body = {}) {
 
   const logoSvg = typeof body.logoSvg === 'string' ? body.logoSvg : null;
   return { appName, smtp, logoSvg };
+}
+
+function validateAiBaseUrl(rawBaseUrl) {
+  const trimmed = String(rawBaseUrl || '').trim();
+  if (!trimmed) {
+    throw new Error('AI base URL is required when AI is enabled');
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('AI base URL is invalid');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('AI base URL must use HTTP or HTTPS protocol');
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error('AI base URL must not include credentials');
+  }
+
+  const normalizedPath = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname.replace(/\/+$/, '') : '';
+  return `${parsed.origin}${normalizedPath}`;
+}
+
+function getAllowedAiBaseUrls() {
+  const configured = String(process.env.AI_ALLOWED_BASE_URLS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const candidates = configured.length > 0 ? configured : DEFAULT_ALLOWED_AI_BASE_URLS;
+  return candidates.map(validateAiBaseUrl);
+}
+
+function resolveAiBaseUrl(rawBaseUrl) {
+  const normalizedRequestedUrl = validateAiBaseUrl(rawBaseUrl);
+  const allowedBaseUrls = getAllowedAiBaseUrls();
+  const allowedUrl = allowedBaseUrls.find((url) => url === normalizedRequestedUrl);
+  if (!allowedUrl) {
+    throw new Error('AI base URL is not allowed');
+  }
+  return allowedUrl;
 }
 
 async function saveOptionalLogo(logoSvg) {
@@ -967,22 +1016,22 @@ app.post('/api/ai/chat', verifyToken, async (req, res) => {
 
     const systemMessage = {
       role: 'system',
-      content: \`Du bist ein hilfreicher KI-Assistent für das System 'Nova'. Du hast reinen Lesezugriff auf die aktuelle Datenbank-Zusammenfassung:
-\${JSON.stringify(dbContext, null, 2)}
-Bitte antworte kurz, prägnant und hilfreich auf Fragen zum System oder den Daten.\`
+      content: `Du bist ein hilfreicher KI-Assistent für das System 'Nova'. Du hast reinen Lesezugriff auf die aktuelle Datenbank-Zusammenfassung:
+      ${JSON.stringify(dbContext, null, 2)}
+      Bitte antworte kurz, prägnant und hilfreich auf Fragen zum System oder den Daten.`
     };
 
     const apiMessages = [systemMessage, ...messages];
 
-    const baseUrl = appConfig.ai.baseUrl;
+    const baseUrl = resolveAiBaseUrl(appConfig.ai.baseUrl);
     const apiKey = appConfig.ai.apiKey;
     const model = appConfig.ai.model;
 
-    const response = await fetch(\`\${baseUrl}/v1/chat/completions\`, {
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${apiKey}\`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: model,
@@ -1024,9 +1073,15 @@ app.put('/api/admin/system-config', verifyToken, verifySuperAdmin, async (req, r
 
     let ai = null;
     if (req.body?.ai && typeof req.body.ai === 'object') {
+      const enabled = req.body.ai.enabled === true;
+      const baseUrlInput = String(req.body.ai.baseUrl || '').trim();
+      const normalizedBaseUrl = baseUrlInput ? resolveAiBaseUrl(baseUrlInput) : '';
+      if (enabled && !normalizedBaseUrl) {
+        throw new Error('AI base URL is required when AI is enabled');
+      }
       ai = {
-        enabled: req.body.ai.enabled === true,
-        baseUrl: String(req.body.ai.baseUrl || '').trim(),
+        enabled,
+        baseUrl: enabled ? normalizedBaseUrl : '',
         apiKey: String(req.body.ai.apiKey || '').trim(),
         model: String(req.body.ai.model || '').trim()
       };
