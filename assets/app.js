@@ -2864,10 +2864,10 @@ async function checkAiStatus() {
         aiEnabled = false;
     }
     const desktopBtn = document.getElementById('ai-chat-nav-btn');
-    const bottomBtn = document.getElementById('ai-chat-bottom-nav-btn');
+    const fabBtn = document.getElementById('ai-chat-fab-btn');
     const display = aiEnabled ? '' : 'none';
     if (desktopBtn) desktopBtn.style.display = display;
-    if (bottomBtn) bottomBtn.style.display = display;
+    if (fabBtn) fabBtn.style.display = aiEnabled ? 'flex' : 'none';
 }
 
 function renderAiMessages() {
