@@ -1086,3 +1086,26 @@ input:checked + .slider:before { transform: translateX(22px); }
     will-change: transform;
 }
 .form-input.has-toggle { padding-right: 40px; }
+
+
+/* AI Chat */
+.ai-bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    word-break: break-word;
+    font-size: 0.92rem;
+    white-space: pre-wrap;
+}
+.ai-bubble-user {
+    align-self: flex-end;
+    border-radius: 18px 18px 4px 18px;
+    background: var(--primary);
+    color: #fff;
+}
+.ai-bubble-assistant {
+    align-self: flex-start;
+    border-radius: 18px 18px 18px 4px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}

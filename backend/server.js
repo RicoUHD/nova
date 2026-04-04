@@ -998,7 +998,20 @@ app.post('/api/admin/ai-chat', verifyToken, verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Missing or invalid messages array' });
     }
 
-    const baseUrl = (appConfig.ai.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const rawBaseUrl = (appConfig.ai.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+
+    // Validate that the configured baseUrl is a valid http/https URL to prevent SSRF
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(`${rawBaseUrl}/chat/completions`);
+    } catch {
+      return res.status(500).json({ error: 'Invalid AI base URL configured' });
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return res.status(500).json({ error: 'Invalid AI base URL configured' });
+    }
+    const apiEndpoint = parsedUrl.toString();
+
     const model = appConfig.ai.model || 'gpt-4o';
 
     // Fetch full DB snapshot for context
@@ -1036,14 +1049,20 @@ app.post('/api/admin/ai-chat', verifyToken, verifyAdmin, async (req, res) => {
       ]
     };
 
-    const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${appConfig.ai.apiKey}`
-      },
-      body: JSON.stringify(payload)
-    });
+    let aiResponse;
+    try {
+      aiResponse = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${appConfig.ai.apiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (fetchError) {
+      console.error('AI API connection error:', fetchError);
+      return res.status(502).json({ error: 'Could not connect to AI API', detail: fetchError.message });
+    }
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text().catch(() => '');

@@ -2859,7 +2859,8 @@ async function checkAiStatus() {
         if (!response.ok) return;
         const data = await response.json();
         aiEnabled = !!data.enabled;
-    } catch {
+    } catch (err) {
+        console.error('AI status check failed:', err);
         aiEnabled = false;
     }
     const desktopBtn = document.getElementById('ai-chat-nav-btn');
@@ -2885,9 +2886,8 @@ function renderAiMessages() {
 
     aiChatHistory.forEach(msg => {
         const div = document.createElement('div');
-        div.className = 'ai-bubble';
         const isUser = msg.role === 'user';
-        div.style.cssText = `align-self:${isUser ? 'flex-end' : 'flex-start'}; max-width:80%; padding:10px 14px; border-radius:${isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px'}; background:${isUser ? 'var(--primary)' : 'var(--card-bg)'}; color:${isUser ? '#fff' : 'var(--text-primary)'}; border:${isUser ? 'none' : '1px solid var(--border)'}; white-space:pre-wrap; word-break:break-word; font-size:0.92rem;`;
+        div.className = `ai-bubble ${isUser ? 'ai-bubble-user' : 'ai-bubble-assistant'}`;
         div.textContent = msg.content;
         container.appendChild(div);
     });
@@ -2928,7 +2928,6 @@ window.sendAiMessage = async () => {
     } catch (err) {
         console.error('AI chat error:', err);
         showToast(`AI Fehler: ${err.message || 'Unbekannter Fehler'}`, 'error');
-        aiChatHistory.pop();
     } finally {
         input.disabled = false;
         sendBtn.disabled = false;
