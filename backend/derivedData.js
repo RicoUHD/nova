@@ -298,7 +298,7 @@ function getIsoDateDay(dateStr) {
         }
     }
     const parsed = new Date(dateStr);
-    return Number.isNaN(parsed.getTime()) ? 1 : parsed.getDate();
+    return Number.isNaN(parsed.getTime()) ? null : parsed.getDate();
 }
 
 function isPaymentInCurrentMonth(paymentDate, today) {
@@ -348,7 +348,10 @@ function calculateAnticipatedStandingOrderPayment(person, today = new Date()) {
             continue;
         }
 
-        const dayOfMonth = Math.max(1, getIsoDateDay(so.startDate));
+        const dayOfMonth = getIsoDateDay(so.startDate);
+        if (!dayOfMonth) {
+            continue;
+        }
         const maxDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
         const dueDay = Math.min(dayOfMonth, maxDays);
         const dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
@@ -390,7 +393,7 @@ function preprocessPersonServerSide(person, settings) {
     const { paidUntil, remainingCredit } = calculatePaymentStatus(person, settings);
     const currentBalance = calculateCurrentBalance(person, settings);
     const { anticipated, hasActiveSO } = calculateAnticipatedStandingOrderPayment(person);
-    const isCurrent = (currentBalance + anticipated) >= 0;
+    const isCurrent = (currentBalance + anticipated) >= -AMOUNT_COMPARISON_EPSILON;
     const overdueAmount = isCurrent ? 0 : calculateOverdueAmount(person, paidUntil, remainingCredit, settings);
     const statusMeta = isCurrent
         ? {
