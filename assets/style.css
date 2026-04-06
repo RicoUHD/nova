@@ -420,6 +420,18 @@ body { background-color: var(--bg); color: var(--text); min-height: 100vh; paddi
 .nav-item.active { color: var(--secondary); }
 .nav-item.active svg { opacity: 1; stroke: var(--secondary); }
 
+.nav-action-bg {
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+.nav-action-bg svg {
+    opacity: 1 !important;
+    width: 24px; height: 24px;
+}
+
 .nav-center {
     position: absolute; width: 64px; height: 64px;
     top: -20px;
