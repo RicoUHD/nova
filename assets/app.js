@@ -2971,7 +2971,7 @@ function appendAiMessage(role, content) {
     const bubble = document.createElement('div');
     bubble.className = `ai-chat-bubble ai-chat-bubble-${role}`;
     if (role === 'assistant') {
-        bubble.innerHTML = renderMarkdown(content);
+        bubble.appendChild(renderMarkdown(content));
     } else {
         bubble.textContent = content;
     }
@@ -2981,11 +2981,21 @@ function appendAiMessage(role, content) {
 }
 
 /**
- * Renders a thinking/reasoning block inside a collapsed <details> dropdown.
+ * Builds a collapsed <details> element for thinking/reasoning content.
+ * All text is set via textContent to prevent XSS.
  */
-function renderThinkingBlock(thinkingText) {
-    const escapedThinking = escapeHtml(thinkingText.trim());
-    return `<details class="ai-thinking"><summary class="ai-thinking-summary">Denkprozess anzeigen</summary><pre class="ai-thinking-content">${escapedThinking}</pre></details>`;
+function buildThinkingElement(thinkingText) {
+    const details = document.createElement('details');
+    details.className = 'ai-thinking';
+    const summary = document.createElement('summary');
+    summary.className = 'ai-thinking-summary';
+    summary.textContent = 'Denkprozess anzeigen';
+    const pre = document.createElement('pre');
+    pre.className = 'ai-thinking-content';
+    pre.textContent = thinkingText.trim();
+    details.appendChild(summary);
+    details.appendChild(pre);
+    return details;
 }
 
 /**
@@ -3004,104 +3014,138 @@ function finalizeAssistantBubble(bubble, rawContent, reasoningContent) {
 
     const combinedThinking = (reasoningContent + thinkingFromContent).trim();
 
-    let html = '';
+    bubble.replaceChildren();
     if (combinedThinking) {
-        html += renderThinkingBlock(combinedThinking);
+        bubble.appendChild(buildThinkingElement(combinedThinking));
     }
-    html += renderMarkdown(mainContent);
-    bubble.innerHTML = html;
+    bubble.appendChild(renderMarkdown(mainContent));
 }
 
 /**
- * Lightweight Markdown → safe HTML renderer for AI chat messages.
+ * Lightweight Markdown → DOM fragment renderer for AI chat messages.
+ * Uses DOM APIs exclusively (no innerHTML) to prevent XSS.
  * Handles: fenced code blocks, inline code, bold, italic, headers, lists, line breaks.
  */
 function renderMarkdown(text) {
-    if (!text) return '';
+    const frag = document.createDocumentFragment();
+    if (!text) return frag;
 
-    // 1. Extract fenced code blocks to protect them from other transforms
+    // 1. Extract fenced code blocks to protect them from inline transforms
     const codeBlocks = [];
-    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
         const idx = codeBlocks.length;
-        const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : '';
-        codeBlocks.push(`<pre class="ai-code-block"><code${langAttr}>${escapeHtml(code.replace(/\n$/, ''))}</code></pre>`);
+        codeBlocks.push({ lang: lang || '', code: code.replace(/\n$/, '') });
         return `\x00CODE${idx}\x00`;
     });
 
-    // 2. Split into lines for block-level processing
-    const lines = text.split('\n');
-    const output = [];
+    // 2. Process lines for block-level elements
+    const lines = processed.split('\n');
     let i = 0;
 
     while (i < lines.length) {
         const line = lines[i];
 
-        // Unordered list item
+        // Unordered list
         if (/^[ \t]*[-*] /.test(line)) {
-            const items = [];
+            const ul = document.createElement('ul');
             while (i < lines.length && /^[ \t]*[-*] /.test(lines[i])) {
-                items.push(`<li>${renderInline(lines[i].replace(/^[ \t]*[-*] /, ''))}</li>`);
+                const li = document.createElement('li');
+                appendInlineNodes(li, lines[i].replace(/^[ \t]*[-*] /, ''));
+                ul.appendChild(li);
                 i++;
             }
-            output.push(`<ul>${items.join('')}</ul>`);
+            frag.appendChild(ul);
             continue;
         }
 
-        // Ordered list item
+        // Ordered list
         if (/^[ \t]*\d+\. /.test(line)) {
-            const items = [];
+            const ol = document.createElement('ol');
             while (i < lines.length && /^[ \t]*\d+\. /.test(lines[i])) {
-                items.push(`<li>${renderInline(lines[i].replace(/^[ \t]*\d+\. /, ''))}</li>`);
+                const li = document.createElement('li');
+                appendInlineNodes(li, lines[i].replace(/^[ \t]*\d+\. /, ''));
+                ol.appendChild(li);
                 i++;
             }
-            output.push(`<ol>${items.join('')}</ol>`);
+            frag.appendChild(ol);
             continue;
         }
 
-        // Headers
-        const h3 = line.match(/^### (.+)/);
-        if (h3) { output.push(`<h3>${renderInline(h3[1])}</h3>`); i++; continue; }
-        const h2 = line.match(/^## (.+)/);
-        if (h2) { output.push(`<h2>${renderInline(h2[1])}</h2>`); i++; continue; }
-        const h1 = line.match(/^# (.+)/);
-        if (h1) { output.push(`<h1>${renderInline(h1[1])}</h1>`); i++; continue; }
+        // Headers (# ## ###)
+        const headingMatch = line.match(/^(#{1,3}) (.+)/);
+        if (headingMatch) {
+            const level = headingMatch[1].length;
+            const el = document.createElement(`h${level}`);
+            appendInlineNodes(el, headingMatch[2]);
+            frag.appendChild(el);
+            i++;
+            continue;
+        }
 
         // Horizontal rule
-        if (/^---+$/.test(line.trim())) { output.push('<hr>'); i++; continue; }
+        if (/^---+$/.test(line.trim())) {
+            frag.appendChild(document.createElement('hr'));
+            i++;
+            continue;
+        }
 
-        // Code block placeholder
-        if (line.includes('\x00CODE')) { output.push(line); i++; continue; }
+        // Fenced code block placeholder
+        const codeMatch = line.match(/^\x00CODE(\d+)\x00$/);
+        if (codeMatch) {
+            const { lang, code } = codeBlocks[parseInt(codeMatch[1], 10)];
+            const pre = document.createElement('pre');
+            pre.className = 'ai-code-block';
+            const codeEl = document.createElement('code');
+            if (lang) codeEl.className = `language-${lang}`;
+            codeEl.textContent = code;
+            pre.appendChild(codeEl);
+            frag.appendChild(pre);
+            i++;
+            continue;
+        }
 
-        // Empty line → paragraph break
-        if (line.trim() === '') { output.push('<br>'); i++; continue; }
+        // Empty line → visual break
+        if (line.trim() === '') {
+            frag.appendChild(document.createElement('br'));
+            i++;
+            continue;
+        }
 
-        // Normal paragraph line
-        output.push(`<p>${renderInline(line)}</p>`);
+        // Paragraph
+        const p = document.createElement('p');
+        appendInlineNodes(p, line);
+        frag.appendChild(p);
         i++;
     }
 
-    // 3. Join and restore code blocks
-    let result = output.join('');
-    result = result.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codeBlocks[parseInt(idx, 10)]);
-
-    return result;
+    return frag;
 }
 
 /**
- * Renders inline markdown elements: bold, italic, inline code.
- * Escapes HTML first to prevent XSS.
+ * Parses inline markdown (bold, italic, inline code) and appends DOM nodes to parent.
+ * Text nodes are created with createTextNode — no innerHTML, no XSS risk.
  */
-function renderInline(text) {
-    text = escapeHtml(text);
-    // Inline code (must come before bold/italic)
-    text = text.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
-    // Bold
-    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-    // Italic
-    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
-    return text;
+function appendInlineNodes(parent, text) {
+    // Split on inline patterns (backtick code, bold **, italic *)
+    const parts = text.split(/(`[^`]+`|\*\*(?:.+?)\*\*|\*(?:[^*]+)\*)/);
+    for (const part of parts) {
+        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+            const code = document.createElement('code');
+            code.className = 'ai-inline-code';
+            code.textContent = part.slice(1, -1);
+            parent.appendChild(code);
+        } else if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+            const strong = document.createElement('strong');
+            strong.textContent = part.slice(2, -2);
+            parent.appendChild(strong);
+        } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+            const em = document.createElement('em');
+            em.textContent = part.slice(1, -1);
+            parent.appendChild(em);
+        } else {
+            parent.appendChild(document.createTextNode(part));
+        }
+    }
 }
 
 window.sendAiMessage = async () => {
