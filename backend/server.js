@@ -1311,8 +1311,12 @@ app.post('/api/ai/chat', aiChatRateLimit, verifyToken, verifyAdmin, async (req, 
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices?.[0]?.delta?.content;
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content;
               if (typeof content === 'string') {
                 res.write(`data: ${JSON.stringify({ content })}\n\n`);
+              }
+              if (typeof reasoning === 'string') {
+                res.write(`data: ${JSON.stringify({ reasoning })}\n\n`);
               }
             } catch { /* skip malformed chunks */ }
           }

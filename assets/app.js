@@ -2970,10 +2970,182 @@ function appendAiMessage(role, content) {
 
     const bubble = document.createElement('div');
     bubble.className = `ai-chat-bubble ai-chat-bubble-${role}`;
-    bubble.textContent = content;
+    if (role === 'assistant') {
+        bubble.appendChild(renderMarkdown(content));
+    } else {
+        bubble.textContent = content;
+    }
     messagesEl.appendChild(bubble);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return bubble;
+}
+
+/**
+ * Builds a collapsed <details> element for thinking/reasoning content.
+ * All text is set via textContent to prevent XSS.
+ */
+function buildThinkingElement(thinkingText) {
+    const details = document.createElement('details');
+    details.className = 'ai-thinking';
+    const summary = document.createElement('summary');
+    summary.className = 'ai-thinking-summary';
+    summary.textContent = 'Denkprozess anzeigen';
+    const pre = document.createElement('pre');
+    pre.className = 'ai-thinking-content';
+    pre.textContent = thinkingText.trim();
+    details.appendChild(summary);
+    details.appendChild(pre);
+    return details;
+}
+
+/**
+ * Finalises an assistant bubble after streaming is complete.
+ * Extracts <think>…</think> blocks, renders thinking dropdown + markdown body.
+ */
+function finalizeAssistantBubble(bubble, rawContent, reasoningContent) {
+    if (!bubble) return;
+
+    // Extract <think>…</think> blocks from content (some models embed thinking inline)
+    let thinkingFromContent = '';
+    const mainContent = rawContent.replace(/<think>([\s\S]*?)<\/think>/gi, (_, inner) => {
+        thinkingFromContent += inner;
+        return '';
+    }).trim();
+
+    const combinedThinking = (reasoningContent + thinkingFromContent).trim();
+
+    bubble.replaceChildren();
+    if (combinedThinking) {
+        bubble.appendChild(buildThinkingElement(combinedThinking));
+    }
+    bubble.appendChild(renderMarkdown(mainContent));
+}
+
+/**
+ * Lightweight Markdown → DOM fragment renderer for AI chat messages.
+ * Uses DOM APIs exclusively (no innerHTML) to prevent XSS.
+ * Handles: fenced code blocks, inline code, bold, italic, headers, lists, line breaks.
+ */
+function renderMarkdown(text) {
+    const frag = document.createDocumentFragment();
+    if (!text) return frag;
+
+    // 1. Extract fenced code blocks to protect them from inline transforms
+    const codeBlocks = [];
+    const processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        codeBlocks.push({ lang: lang || '', code: code.replace(/\n$/, '') });
+        return `\x00CODE${idx}\x00`;
+    });
+
+    // 2. Process lines for block-level elements
+    const lines = processed.split('\n');
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Unordered list
+        if (/^[ \t]*[-*] /.test(line)) {
+            const ul = document.createElement('ul');
+            while (i < lines.length && /^[ \t]*[-*] /.test(lines[i])) {
+                const li = document.createElement('li');
+                appendInlineNodes(li, lines[i].replace(/^[ \t]*[-*] /, ''));
+                ul.appendChild(li);
+                i++;
+            }
+            frag.appendChild(ul);
+            continue;
+        }
+
+        // Ordered list
+        if (/^[ \t]*\d+\. /.test(line)) {
+            const ol = document.createElement('ol');
+            while (i < lines.length && /^[ \t]*\d+\. /.test(lines[i])) {
+                const li = document.createElement('li');
+                appendInlineNodes(li, lines[i].replace(/^[ \t]*\d+\. /, ''));
+                ol.appendChild(li);
+                i++;
+            }
+            frag.appendChild(ol);
+            continue;
+        }
+
+        // Headers (# ## ###)
+        const headingMatch = line.match(/^(#{1,3}) (.+)/);
+        if (headingMatch) {
+            const level = headingMatch[1].length;
+            const el = document.createElement(`h${level}`);
+            appendInlineNodes(el, headingMatch[2]);
+            frag.appendChild(el);
+            i++;
+            continue;
+        }
+
+        // Horizontal rule
+        if (/^---+$/.test(line.trim())) {
+            frag.appendChild(document.createElement('hr'));
+            i++;
+            continue;
+        }
+
+        // Fenced code block placeholder
+        const codeMatch = line.match(/^\x00CODE(\d+)\x00$/);
+        if (codeMatch) {
+            const { lang, code } = codeBlocks[parseInt(codeMatch[1], 10)];
+            const pre = document.createElement('pre');
+            pre.className = 'ai-code-block';
+            const codeEl = document.createElement('code');
+            if (lang) codeEl.className = `language-${lang}`;
+            codeEl.textContent = code;
+            pre.appendChild(codeEl);
+            frag.appendChild(pre);
+            i++;
+            continue;
+        }
+
+        // Empty line → visual break
+        if (line.trim() === '') {
+            frag.appendChild(document.createElement('br'));
+            i++;
+            continue;
+        }
+
+        // Paragraph
+        const p = document.createElement('p');
+        appendInlineNodes(p, line);
+        frag.appendChild(p);
+        i++;
+    }
+
+    return frag;
+}
+
+/**
+ * Parses inline markdown (bold, italic, inline code) and appends DOM nodes to parent.
+ * Text nodes are created with createTextNode — no innerHTML, no XSS risk.
+ */
+function appendInlineNodes(parent, text) {
+    // Split on inline patterns (backtick code, bold **, italic *)
+    const parts = text.split(/(`[^`]+`|\*\*(?:.+?)\*\*|\*(?:[^*]+)\*)/);
+    for (const part of parts) {
+        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+            const code = document.createElement('code');
+            code.className = 'ai-inline-code';
+            code.textContent = part.slice(1, -1);
+            parent.appendChild(code);
+        } else if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+            const strong = document.createElement('strong');
+            strong.textContent = part.slice(2, -2);
+            parent.appendChild(strong);
+        } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+            const em = document.createElement('em');
+            em.textContent = part.slice(1, -1);
+            parent.appendChild(em);
+        } else {
+            parent.appendChild(document.createTextNode(part));
+        }
+    }
 }
 
 window.sendAiMessage = async () => {
@@ -3006,6 +3178,7 @@ window.sendAiMessage = async () => {
 
     let assistantBubble = null;
     let assistantContent = '';
+    let reasoningContent = '';
 
     try {
         let token;
@@ -3051,14 +3224,22 @@ window.sendAiMessage = async () => {
                     const parsed = JSON.parse(data);
                     if (parsed.content) {
                         assistantContent += parsed.content;
+                        // Show raw text while streaming; will be rendered as markdown after done
                         if (assistantBubble) {
                             assistantBubble.textContent = assistantContent;
                             if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
                         }
                     }
+                    if (parsed.reasoning) {
+                        reasoningContent += parsed.reasoning;
+                    }
                 } catch { /* skip */ }
             }
         }
+
+        // Re-render with markdown + optional thinking dropdown
+        finalizeAssistantBubble(assistantBubble, assistantContent, reasoningContent);
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
 
         aiMessages.push({ role: 'assistant', content: assistantContent });
     } catch (err) {
