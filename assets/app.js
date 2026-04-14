@@ -21,6 +21,9 @@ let superAdminPaymentRows = [];
 let superAdminUserRows = [];
 let currentEditedPayment = null;
 let sseConnection = null;
+let aiEnabled = false;
+let aiMessages = [];
+let aiStreaming = false;
 
 function connectSSE() {
     if (sseConnection) return;
@@ -1148,6 +1151,16 @@ async function loadData(silent = false) {
         if(userBottomNav) userBottomNav.style.display = 'none';
 
         document.getElementById('settings').style.display = '';
+
+        // Fetch AI enabled state for all admins to show/hide AI nav button
+        fetchWithAuth(`${config.apiBaseUrl}/admin/ai-status`).then(r => {
+            if (r.ok) return r.json();
+        }).then(data => {
+            if (data) {
+                aiEnabled = !!data.enabled;
+                updateAiNavVisibility();
+            }
+        }).catch(() => {});
     }
 
     // Normalize people data
@@ -2811,6 +2824,7 @@ async function loadAdvancedSystemConfig() {
         document.getElementById('super-admin-smtp-user').value = data.smtp?.user || '';
         document.getElementById('super-admin-smtp-pass').value = data.smtp?.pass || '';
         advancedConfigLoaded = true;
+        await loadAiConfig();
     } catch (err) {
         console.error('Fehler beim Laden der erweiterten Konfiguration:', err);
         showToast('Erweiterte Konfiguration konnte nicht geladen werden', 'error');
@@ -2866,6 +2880,204 @@ window.saveAdvancedSystemConfig = async () => {
     } catch (err) {
         console.error('Fehler beim Speichern der erweiterten Konfiguration:', err);
         alert(`Erweiterte Konfiguration konnte nicht gespeichert werden: ${err.message || 'Unbekannter Fehler'}`);
+    }
+};
+
+async function loadAiConfig() {
+    if (!isSuperAdminUser()) return;
+    try {
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/admin/ai-config`);
+        if (!response.ok) return;
+        const data = await response.json();
+        aiEnabled = !!data.enabled;
+        const enabledEl = document.getElementById('super-admin-ai-enabled');
+        if (enabledEl) enabledEl.checked = data.enabled;
+        const baseUrlEl = document.getElementById('super-admin-ai-base-url');
+        if (baseUrlEl) baseUrlEl.value = data.baseUrl || '';
+        const apiKeyEl = document.getElementById('super-admin-ai-api-key');
+        if (apiKeyEl) apiKeyEl.value = data.apiKey || '';
+        const modelEl = document.getElementById('super-admin-ai-model');
+        if (modelEl) modelEl.value = data.model || '';
+        updateAiNavVisibility();
+    } catch (err) {
+        console.error('KI-Konfiguration konnte nicht geladen werden:', err);
+    }
+}
+
+window.saveAiConfig = async () => {
+    if (!isSuperAdminUser()) return;
+    try {
+        const payload = {
+            enabled: document.getElementById('super-admin-ai-enabled')?.checked ?? false,
+            baseUrl: document.getElementById('super-admin-ai-base-url')?.value.trim() || '',
+            apiKey: document.getElementById('super-admin-ai-api-key')?.value || '',
+            model: document.getElementById('super-admin-ai-model')?.value.trim() || ''
+        };
+        const response = await fetchWithAuth(`${config.apiBaseUrl}/admin/ai-config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+        aiEnabled = payload.enabled;
+        updateAiNavVisibility();
+        showToast('KI-Einstellungen gespeichert');
+    } catch (err) {
+        console.error('Fehler beim Speichern der KI-Einstellungen:', err);
+        alert(`KI-Einstellungen konnten nicht gespeichert werden: ${err.message || 'Unbekannter Fehler'}`);
+    }
+};
+
+function updateAiNavVisibility() {
+    const show = aiEnabled && !!(currentUser && currentUser.admin);
+    const bottomBtn = document.getElementById('admin-ai-nav-btn');
+    const desktopBtn = document.getElementById('admin-ai-nav-btn-desktop');
+    if (bottomBtn) bottomBtn.style.display = show ? '' : 'none';
+    if (desktopBtn) desktopBtn.style.display = show ? '' : 'none';
+}
+
+window.clearAiChat = () => {
+    aiMessages = [];
+    const messagesEl = document.getElementById('ai-chat-messages');
+    if (!messagesEl) return;
+    messagesEl.innerHTML = `
+        <div class="ai-chat-welcome">
+            <div class="ai-chat-welcome-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="ai-chat-welcome-text">KI-Assistent bereit</div>
+            <div class="ai-chat-welcome-sub">Stelle Fragen zu deinen Mitgliedern, Finanzen oder Einstellungen.</div>
+        </div>`;
+};
+
+window.handleAiChatKey = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendAiMessage();
+    }
+};
+
+function appendAiMessage(role, content) {
+    const messagesEl = document.getElementById('ai-chat-messages');
+    if (!messagesEl) return null;
+
+    // Remove welcome screen on first message
+    const welcome = messagesEl.querySelector('.ai-chat-welcome');
+    if (welcome) welcome.remove();
+
+    const bubble = document.createElement('div');
+    bubble.className = `ai-chat-bubble ai-chat-bubble-${role}`;
+    bubble.textContent = content;
+    messagesEl.appendChild(bubble);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return bubble;
+}
+
+window.sendAiMessage = async () => {
+    if (aiStreaming) return;
+    const inputEl = document.getElementById('ai-chat-input');
+    const sendBtn = document.getElementById('ai-chat-send-btn');
+    if (!inputEl) return;
+
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    inputEl.value = '';
+    inputEl.style.height = '';
+
+    aiMessages.push({ role: 'user', content: text });
+    appendAiMessage('user', text);
+
+    aiStreaming = true;
+    if (sendBtn) sendBtn.disabled = true;
+
+    // Show typing indicator
+    const messagesEl = document.getElementById('ai-chat-messages');
+    const typingEl = document.createElement('div');
+    typingEl.className = 'ai-chat-typing';
+    typingEl.innerHTML = '<span></span><span></span><span></span>';
+    if (messagesEl) {
+        messagesEl.appendChild(typingEl);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    let assistantBubble = null;
+    let assistantContent = '';
+
+    try {
+        let token;
+        try {
+            token = await auth.currentUser.getIdToken();
+        } catch {
+            throw new Error('Authentifizierung fehlgeschlagen');
+        }
+
+        const response = await fetch(`${config.apiBaseUrl}/ai/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ messages: aiMessages })
+        });
+
+        if (typingEl.parentNode) typingEl.remove();
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+
+        assistantBubble = appendAiMessage('assistant', '');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data:')) continue;
+                const data = trimmed.slice(5).trim();
+                if (data === '[DONE]') break;
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.content) {
+                        assistantContent += parsed.content;
+                        if (assistantBubble) {
+                            assistantBubble.textContent = assistantContent;
+                            if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+        }
+
+        aiMessages.push({ role: 'assistant', content: assistantContent });
+    } catch (err) {
+        if (typingEl.parentNode) typingEl.remove();
+        console.error('KI-Chat Fehler:', err);
+        if (assistantBubble) {
+            assistantBubble.textContent = `Fehler: ${err.message || 'Unbekannter Fehler'}`;
+            assistantBubble.classList.add('ai-chat-bubble-error');
+        } else {
+            const errBubble = appendAiMessage('assistant', `Fehler: ${err.message || 'Unbekannter Fehler'}`);
+            if (errBubble) errBubble.classList.add('ai-chat-bubble-error');
+        }
+        // Remove the failed user message from history so the user can retry
+        if (aiMessages.length > 0 && aiMessages[aiMessages.length - 1].role === 'user') {
+            aiMessages.pop();
+        }
+    } finally {
+        aiStreaming = false;
+        if (sendBtn) sendBtn.disabled = false;
     }
 };
 
