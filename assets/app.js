@@ -2970,10 +2970,138 @@ function appendAiMessage(role, content) {
 
     const bubble = document.createElement('div');
     bubble.className = `ai-chat-bubble ai-chat-bubble-${role}`;
-    bubble.textContent = content;
+    if (role === 'assistant') {
+        bubble.innerHTML = renderMarkdown(content);
+    } else {
+        bubble.textContent = content;
+    }
     messagesEl.appendChild(bubble);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return bubble;
+}
+
+/**
+ * Renders a thinking/reasoning block inside a collapsed <details> dropdown.
+ */
+function renderThinkingBlock(thinkingText) {
+    const escapedThinking = escapeHtml(thinkingText.trim());
+    return `<details class="ai-thinking"><summary class="ai-thinking-summary">Denkprozess anzeigen</summary><pre class="ai-thinking-content">${escapedThinking}</pre></details>`;
+}
+
+/**
+ * Finalises an assistant bubble after streaming is complete.
+ * Extracts <think>…</think> blocks, renders thinking dropdown + markdown body.
+ */
+function finalizeAssistantBubble(bubble, rawContent, reasoningContent) {
+    if (!bubble) return;
+
+    // Extract <think>…</think> blocks from content (some models embed thinking inline)
+    let thinkingFromContent = '';
+    const mainContent = rawContent.replace(/<think>([\s\S]*?)<\/think>/gi, (_, inner) => {
+        thinkingFromContent += inner;
+        return '';
+    }).trim();
+
+    const combinedThinking = (reasoningContent + thinkingFromContent).trim();
+
+    let html = '';
+    if (combinedThinking) {
+        html += renderThinkingBlock(combinedThinking);
+    }
+    html += renderMarkdown(mainContent);
+    bubble.innerHTML = html;
+}
+
+/**
+ * Lightweight Markdown → safe HTML renderer for AI chat messages.
+ * Handles: fenced code blocks, inline code, bold, italic, headers, lists, line breaks.
+ */
+function renderMarkdown(text) {
+    if (!text) return '';
+
+    // 1. Extract fenced code blocks to protect them from other transforms
+    const codeBlocks = [];
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const idx = codeBlocks.length;
+        const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : '';
+        codeBlocks.push(`<pre class="ai-code-block"><code${langAttr}>${escapeHtml(code.replace(/\n$/, ''))}</code></pre>`);
+        return `\x00CODE${idx}\x00`;
+    });
+
+    // 2. Split into lines for block-level processing
+    const lines = text.split('\n');
+    const output = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Unordered list item
+        if (/^[ \t]*[-*] /.test(line)) {
+            const items = [];
+            while (i < lines.length && /^[ \t]*[-*] /.test(lines[i])) {
+                items.push(`<li>${renderInline(lines[i].replace(/^[ \t]*[-*] /, ''))}</li>`);
+                i++;
+            }
+            output.push(`<ul>${items.join('')}</ul>`);
+            continue;
+        }
+
+        // Ordered list item
+        if (/^[ \t]*\d+\. /.test(line)) {
+            const items = [];
+            while (i < lines.length && /^[ \t]*\d+\. /.test(lines[i])) {
+                items.push(`<li>${renderInline(lines[i].replace(/^[ \t]*\d+\. /, ''))}</li>`);
+                i++;
+            }
+            output.push(`<ol>${items.join('')}</ol>`);
+            continue;
+        }
+
+        // Headers
+        const h3 = line.match(/^### (.+)/);
+        if (h3) { output.push(`<h3>${renderInline(h3[1])}</h3>`); i++; continue; }
+        const h2 = line.match(/^## (.+)/);
+        if (h2) { output.push(`<h2>${renderInline(h2[1])}</h2>`); i++; continue; }
+        const h1 = line.match(/^# (.+)/);
+        if (h1) { output.push(`<h1>${renderInline(h1[1])}</h1>`); i++; continue; }
+
+        // Horizontal rule
+        if (/^---+$/.test(line.trim())) { output.push('<hr>'); i++; continue; }
+
+        // Code block placeholder
+        if (line.includes('\x00CODE')) { output.push(line); i++; continue; }
+
+        // Empty line → paragraph break
+        if (line.trim() === '') { output.push('<br>'); i++; continue; }
+
+        // Normal paragraph line
+        output.push(`<p>${renderInline(line)}</p>`);
+        i++;
+    }
+
+    // 3. Join and restore code blocks
+    let result = output.join('');
+    result = result.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codeBlocks[parseInt(idx, 10)]);
+
+    return result;
+}
+
+/**
+ * Renders inline markdown elements: bold, italic, inline code.
+ * Escapes HTML first to prevent XSS.
+ */
+function renderInline(text) {
+    text = escapeHtml(text);
+    // Inline code (must come before bold/italic)
+    text = text.replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>');
+    // Bold
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    // Italic
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
+    return text;
 }
 
 window.sendAiMessage = async () => {
@@ -3006,6 +3134,7 @@ window.sendAiMessage = async () => {
 
     let assistantBubble = null;
     let assistantContent = '';
+    let reasoningContent = '';
 
     try {
         let token;
@@ -3051,14 +3180,22 @@ window.sendAiMessage = async () => {
                     const parsed = JSON.parse(data);
                     if (parsed.content) {
                         assistantContent += parsed.content;
+                        // Show raw text while streaming; will be rendered as markdown after done
                         if (assistantBubble) {
                             assistantBubble.textContent = assistantContent;
                             if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
                         }
                     }
+                    if (parsed.reasoning) {
+                        reasoningContent += parsed.reasoning;
+                    }
                 } catch { /* skip */ }
             }
         }
+
+        // Re-render with markdown + optional thinking dropdown
+        finalizeAssistantBubble(assistantBubble, assistantContent, reasoningContent);
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
 
         aiMessages.push({ role: 'assistant', content: assistantContent });
     } catch (err) {

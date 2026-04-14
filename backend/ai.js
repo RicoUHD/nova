@@ -1,4 +1,4 @@
-const { getStateValue, upsertStateValue, listPeopleRecords, listExpenseRecords, listUserRecords } = require('./pocketbase');
+const { getStateValue, upsertStateValue, listPeopleRecords, listExpenseRecords, listUserRecords, listRequestRecords } = require('./pocketbase');
 
 const AI_STATE_KEY = 'ai_config';
 
@@ -33,20 +33,21 @@ async function setAiSettings(appConfig, patch) {
 }
 
 /**
- * Builds a database context snapshot for the AI system prompt.
- * Only includes aggregate/schema-level data. All PII and sensitive
- * fields (passwords, tokens, emails, full names) are excluded.
+ * Builds a full database context snapshot for the AI system prompt.
+ * Includes all member, expense, and pending request records.
+ * Sensitive fields (passwords, tokens, emails, user IDs, receipt URLs) are excluded.
  */
 async function buildDatabaseSnapshot(appConfig) {
   try {
-    const [people, expenses, users, settings] = await Promise.all([
+    const [people, expenses, users, settings, requests] = await Promise.all([
       listPeopleRecords(appConfig).catch(() => []),
       listExpenseRecords(appConfig).catch(() => []),
       listUserRecords(appConfig).catch(() => []),
-      getStateValue(appConfig, 'settings', {}).catch(() => ({}))
+      getStateValue(appConfig, 'settings', {}).catch(() => ({})),
+      listRequestRecords(appConfig).catch(() => [])
     ]);
 
-    // Aggregate member statistics without any personal identifiers
+    // Aggregate summary statistics
     const membersByStatus = {};
     let totalPaidAcrossMembers = 0;
     for (const p of people) {
@@ -55,47 +56,49 @@ async function buildDatabaseSnapshot(appConfig) {
       totalPaidAcrossMembers += parseFloat(p.totalPaid || 0);
     }
 
-    // Expense totals only (no issuers or descriptions)
     let totalExpenses = 0;
     for (const e of expenses) {
       totalExpenses += parseFloat(e.amount || 0);
     }
 
+    // Build full member records (no uid, no raw data blob)
+    const memberRecords = people.map((p) => {
+      const payments = Array.isArray(p.data?.payments) ? p.data.payments : [];
+      return {
+        id: p.personKey,
+        name: p.name || '',
+        status: p.status || '',
+        memberSince: p.memberSince || '',
+        totalPaid: Math.round(parseFloat(p.totalPaid || 0) * 100) / 100,
+        payments: payments.map((pay) => ({
+          amount: Math.round(parseFloat(pay.amount || 0) * 100) / 100,
+          date: pay.date || '',
+          description: pay.description || ''
+        }))
+      };
+    });
+
+    // Build expense records (no receipt field)
+    const expenseRecords = expenses.map((e) => ({
+      id: e.expenseKey,
+      amount: Math.round(parseFloat(e.amount || 0) * 100) / 100,
+      date: e.date || '',
+      issuer: e.issuer || '',
+      description: e.description || ''
+    }));
+
+    // Include only pending requests (no userId)
+    const pendingRequests = requests
+      .filter((r) => r.status === 'pending')
+      .map((r) => ({
+        id: r.requestKey,
+        type: r.type || '',
+        personName: r.personName || '',
+        timestamp: r.timestamp || null,
+        data: r.data || {}
+      }));
+
     const snapshot = {
-      schema: {
-        collections: [
-          {
-            name: 'people',
-            description: 'Church members',
-            fields: ['personKey', 'status', 'memberSince', 'originalMemberSince', 'totalPaid', 'data']
-          },
-          {
-            name: 'payments',
-            description: 'Member contribution payments',
-            fields: ['paymentKey', 'personKey', 'amount', 'date', 'description', 'data']
-          },
-          {
-            name: 'expenses',
-            description: 'Church expenses / outgoings',
-            fields: ['expenseKey', 'amount', 'date', 'issuer', 'description', 'receipt', 'data']
-          },
-          {
-            name: 'status_history',
-            description: 'History of member status changes',
-            fields: ['historyKey', 'personKey', 'status', 'startDate', 'endDate', 'data']
-          },
-          {
-            name: 'requests',
-            description: 'Member-submitted requests (payment, status change, expense)',
-            fields: ['requestKey', 'userId', 'personId', 'type', 'status', 'timestamp', 'data']
-          },
-          {
-            name: 'app_state',
-            description: 'Key/value application settings (settings, system, ai_config, …)',
-            fields: ['key', 'value']
-          }
-        ]
-      },
       summary: {
         totalMembers: people.length,
         membersByStatus,
@@ -110,7 +113,10 @@ async function buildDatabaseSnapshot(appConfig) {
         geringverdiener: settings.geringverdiener ?? null,
         keinverdiener: settings.keinverdiener ?? null,
         pausiert: settings.pausiert ?? null
-      }
+      },
+      members: memberRecords,
+      expenses: expenseRecords,
+      pendingRequests
     };
 
     return JSON.stringify(snapshot, null, 2);
