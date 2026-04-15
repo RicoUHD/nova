@@ -3005,6 +3005,9 @@ function buildThinkingElement(thinkingText) {
 function finalizeAssistantBubble(bubble, rawContent, reasoningContent) {
     if (!bubble) return;
 
+    const existingDetails = bubble.querySelector('details.ai-thinking');
+    const wasOpen = existingDetails ? existingDetails.open : false;
+
     // Extract <think>…</think> or <thought>…</thought> blocks from content (some models embed thinking inline)
     let thinkingFromContent = '';
     const mainContent = rawContent.replace(/<(?:think|thought)>([\s\S]*?)(?:<\/?(?:think|thought)>|$)/gi, (_, inner) => {
@@ -3016,7 +3019,9 @@ function finalizeAssistantBubble(bubble, rawContent, reasoningContent) {
 
     bubble.replaceChildren();
     if (combinedThinking) {
-        bubble.appendChild(buildThinkingElement(combinedThinking));
+        const thinkingEl = buildThinkingElement(combinedThinking);
+        if (wasOpen) thinkingEl.open = true;
+        bubble.appendChild(thinkingEl);
     }
     bubble.appendChild(renderMarkdown(mainContent));
 }
@@ -3032,7 +3037,7 @@ function renderMarkdown(text) {
 
     // 1. Extract fenced code blocks to protect them from inline transforms
     const codeBlocks = [];
-    const processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const processed = text.replace(/```(\w*)\n?([\s\S]*?)(?:```|$)/g, (_, lang, code) => {
         const idx = codeBlocks.length;
         codeBlocks.push({ lang: lang || '', code: code.replace(/\n$/, '') });
         return `\x00CODE${idx}\x00`;
@@ -3224,14 +3229,13 @@ window.sendAiMessage = async () => {
                     const parsed = JSON.parse(data);
                     if (parsed.content) {
                         assistantContent += parsed.content;
-                        // Show raw text while streaming; will be rendered as markdown after done
-                        if (assistantBubble) {
-                            assistantBubble.textContent = assistantContent;
-                            if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-                        }
                     }
                     if (parsed.reasoning) {
                         reasoningContent += parsed.reasoning;
+                    }
+                    if (assistantBubble) {
+                        finalizeAssistantBubble(assistantBubble, assistantContent, reasoningContent);
+                        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
                     }
                 } catch { /* skip */ }
             }
