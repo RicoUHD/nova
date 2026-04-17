@@ -1188,14 +1188,17 @@ async function loadData(silent = false) {
         document.getElementById('admin-view').style.display = 'none';
         document.getElementById('user-view').style.display = 'block';
 
+        const adminDesktopNav = document.getElementById('admin-desktop-nav');
+        if(adminDesktopNav) adminDesktopNav.style.display = 'none';
+        const userDesktopNav = document.getElementById('user-desktop-nav');
+        if(userDesktopNav) userDesktopNav.style.display = 'flex';
+
         // Hide desktop FAB for non-admins
         const desktopFab = document.getElementById('desktop-fab');
         if(desktopFab) desktopFab.style.display = 'none';
 
         const adminBottomNav = document.getElementById('admin-bottom-nav');
         if(adminBottomNav) adminBottomNav.style.display = 'none';
-        const userBottomNav = document.getElementById('user-bottom-nav');
-        if(userBottomNav) userBottomNav.style.display = 'none'; // Replaced by profile dropdown
 
         document.getElementById('settings').style.display = 'none';
 
@@ -1239,14 +1242,17 @@ async function loadData(silent = false) {
         document.getElementById('admin-view').style.display = 'block';
         document.getElementById('user-view').style.display = 'none';
 
+        const adminDesktopNav = document.getElementById('admin-desktop-nav');
+        if(adminDesktopNav) adminDesktopNav.style.display = 'flex';
+        const userDesktopNav = document.getElementById('user-desktop-nav');
+        if(userDesktopNav) userDesktopNav.style.display = 'none';
+
         // Show desktop FAB for admins (CSS handles layout)
         const desktopFab = document.getElementById('desktop-fab');
         if(desktopFab) desktopFab.style.display = '';
 
         const adminBottomNav = document.getElementById('admin-bottom-nav');
         if(adminBottomNav) adminBottomNav.style.display = 'flex';
-        const userBottomNav = document.getElementById('user-bottom-nav');
-        if(userBottomNav) userBottomNav.style.display = 'none';
 
         document.getElementById('settings').style.display = '';
 
