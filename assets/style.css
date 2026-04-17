@@ -271,9 +271,7 @@ body { background-color: var(--bg); color: var(--text); height: 100dvh; overflow
     background: var(--surface);
     border-radius: 16px;
     box-shadow: var(--shadow-lg);
-    margin-bottom: 25px;
     overflow: hidden;
-    transform: scale(1.02);
 }
 
 /* The Main Clickable Card */
