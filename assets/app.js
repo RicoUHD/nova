@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 window.switchTab = function(tabName, btn) {
     // Some buttons might not pass `btn` or it might not be in a nav, determine scope by string
-    const isUserNav = (btn && (!!btn.closest('#user-bottom-nav') || !!btn.closest('#user-desktop-nav'))) || tabName.startsWith('user-');
+    const isUserNav = (btn && !!btn.closest('#user-desktop-nav')) || tabName.startsWith('user-');
     const scope = isUserNav ? document.getElementById('user-view') : document.getElementById('admin-view');
     if (!scope) return;
 
@@ -262,18 +262,20 @@ window.switchTab = function(tabName, btn) {
         if (tabName === 'payment-history') targetContent.style.display = 'block';
     }
 
-    if (btn) {
-        // Update buttons in the same nav container
-        const container = btn.closest('.bottom-nav') || btn.closest('.desktop-nav');
-        if (container) {
-            container.querySelectorAll('.nav-item, .nav-btn').forEach(el => {
-                el.classList.remove('active');
-                el.setAttribute('aria-selected', 'false');
-            });
-            btn.classList.add('active');
-            btn.setAttribute('aria-selected', 'true');
+    const navSelector = isUserNav
+        ? '#user-desktop-nav [data-tab]'
+        : '#admin-desktop-nav [data-tab], #admin-bottom-nav [data-tab]';
+    const navButtons = document.querySelectorAll(navSelector);
+    navButtons.forEach(el => {
+        const isActive = el.dataset.tab === tabName;
+        if (isActive) {
+            el.classList.add('active');
+            el.setAttribute('aria-selected', 'true');
+        } else {
+            el.classList.remove('active');
+            el.setAttribute('aria-selected', 'false');
         }
-    }
+    });
 
     if (tabName === 'payment-history') {
         window.renderHistoryTab(true);
@@ -314,11 +316,11 @@ window.openSettingsTab = function() {
     // Find the corresponding nav button and trigger switchTab
     let btn;
     if (isAdmin) {
-        btn = document.querySelector('#admin-desktop-nav button[onclick="switchTab(\'settings\', this)"]') ||
-              document.querySelector('#admin-bottom-nav button[onclick="switchTab(\'settings\', this)"]');
+        btn = document.querySelector('#admin-desktop-nav [data-tab="settings"]') ||
+              document.querySelector('#admin-bottom-nav [data-tab="settings"]');
         if(btn) switchTab('settings', btn);
     } else {
-        btn = document.querySelector('#user-desktop-nav button[onclick="switchTab(\'user-settings\', this)"]');
+        btn = document.querySelector('#user-desktop-nav [data-tab="user-settings"]');
         if(btn) switchTab('user-settings', btn);
     }
 };
@@ -337,11 +339,11 @@ window.openHomeTab = function() {
     // Find the corresponding nav button and trigger switchTab
     let btn;
     if (isAdmin) {
-        btn = document.querySelector('#admin-desktop-nav button[onclick="switchTab(\'overview\', this)"]') ||
-              document.querySelector('#admin-bottom-nav button[onclick="switchTab(\'overview\', this)"]');
+        btn = document.querySelector('#admin-desktop-nav [data-tab="overview"]') ||
+              document.querySelector('#admin-bottom-nav [data-tab="overview"]');
         if(btn) switchTab('overview', btn);
     } else {
-        btn = document.querySelector('#user-desktop-nav button[onclick="switchTab(\'user-overview\', this)"]');
+        btn = document.querySelector('#user-desktop-nav [data-tab="user-overview"]');
         if(btn) switchTab('user-overview', btn);
     }
 };
@@ -1187,6 +1189,10 @@ async function loadData(silent = false) {
         // UI toggles
         document.getElementById('admin-view').style.display = 'none';
         document.getElementById('user-view').style.display = 'block';
+        const adminDesktopNav = document.getElementById('admin-desktop-nav');
+        const userDesktopNav = document.getElementById('user-desktop-nav');
+        if (adminDesktopNav) adminDesktopNav.style.display = 'none';
+        if (userDesktopNav) userDesktopNav.style.display = '';
 
         // Hide desktop FAB for non-admins
         const desktopFab = document.getElementById('desktop-fab');
@@ -1238,6 +1244,10 @@ async function loadData(silent = false) {
         // UI toggles
         document.getElementById('admin-view').style.display = 'block';
         document.getElementById('user-view').style.display = 'none';
+        const adminDesktopNav = document.getElementById('admin-desktop-nav');
+        const userDesktopNav = document.getElementById('user-desktop-nav');
+        if (adminDesktopNav) adminDesktopNav.style.display = '';
+        if (userDesktopNav) userDesktopNav.style.display = 'none';
 
         // Show desktop FAB for admins (CSS handles layout)
         const desktopFab = document.getElementById('desktop-fab');
