@@ -241,12 +241,16 @@ window.switchTab = function(tabName, btn) {
     if (!scope) return;
 
     // Hide only the tab contents inside the current scope (admin vs user)
-    scope.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    scope.querySelectorAll('.tab-content').forEach(el => {
+        el.classList.remove('active');
+        if (el.id === 'payment-history') el.style.display = 'none';
+    });
 
     // Show the selected tab content only if it belongs to the same scope
     const targetContent = document.getElementById(tabName);
     if (targetContent && scope.contains(targetContent)) {
         targetContent.classList.add('active');
+        if (tabName === 'payment-history') targetContent.style.display = 'block';
     }
 
     if (btn) {
@@ -260,6 +264,10 @@ window.switchTab = function(tabName, btn) {
             btn.classList.add('active');
             btn.setAttribute('aria-selected', 'true');
         }
+    }
+
+    if (tabName === 'payment-history') {
+        window.renderHistoryTab(true);
     }
 };
 
@@ -1522,104 +1530,8 @@ function renderSuperAdminUserManagement() {
 }
 
 async function renderSuperAdminPaymentEditor() {
-    const target = document.getElementById('super-admin-payment-editor');
-    if (!target || !isSuperAdminUser()) return;
-
-    target.innerHTML = '<div class="spinner" style="margin: 0 auto;"></div>';
-
-    let remoteDonations = [];
-    let remoteExpenses = [];
-    try {
-        remoteDonations = safeList(await apiGet('donations').catch(() => []));
-        remoteExpenses = safeList(await apiGet('expenses').catch(() => []));
-    } catch(e) {
-        console.warn("Could not fetch remote donations/expenses", e);
-    }
-
-    const allRecords = [];
-
-    // Payments
-    people.forEach(person => {
-        safeList(person.payments).forEach((payment, index) => {
-            allRecords.push({
-                type: 'payment',
-                personId: person.id,
-                personName: person.name,
-                paymentId: payment.id ?? `idx-${index}`,
-                paymentIndex: index,
-                payment
-            });
-        });
-    });
-
-    // Donations
-    remoteDonations.forEach((donation, index) => {
-        allRecords.push({
-            type: 'donation',
-            personId: null,
-            personName: donation.name || 'Spende',
-            paymentId: donation.id ?? `don-${index}`,
-            paymentIndex: index,
-            payment: donation
-        });
-    });
-
-    // Expenses
-    remoteExpenses.forEach((expense, index) => {
-        allRecords.push({
-            type: 'expense',
-            personId: null,
-            personName: expense.issuer || 'Ausgabe',
-            paymentId: expense.id ?? `exp-${index}`,
-            paymentIndex: index,
-            payment: expense
-        });
-    });
-
-    allRecords.sort((a, b) => (b.payment.date || '').localeCompare(a.payment.date || ''));
-
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const recentRecords = allRecords.filter(item => {
-        if (!item.payment.date) return false;
-        return item.payment.date >= thirtyDaysAgoStr;
-    });
-
-    superAdminPaymentRows = recentRecords;
-    const preview = superAdminPaymentRows;
-
-    if (preview.length === 0) {
-        target.innerHTML = '<div style="color:var(--text-secondary);">Keine Einträge in den letzten 30 Tagen vorhanden.</div>';
-        return;
-    }
-
-    const options = preview.map((item, index) => {
-        const dateText = item.payment.date ? dateFormatter.format(new Date(item.payment.date)) : 'Kein Datum';
-        const desc = item.payment.description ? ` • ${item.payment.description}` : '';
-
-        let prefix = '';
-        if (item.type === 'donation') prefix = '[Spende] ';
-        else if (item.type === 'expense') prefix = '[Ausgabe] ';
-
-        const label = `${prefix}${item.personName || 'Unbekannt'} • ${dateText} • ${formatCurrency(item.payment.amount)} €${desc}`;
-        return `<option value="${index}">${escapeHtml(label)}</option>`;
-    }).join('');
-
-    target.innerHTML = `
-        <div class="form-group" style="margin:0;">
-            <label class="form-label" for="super-admin-payment-select">Eintrag auswählen (letzte 30 Tage)</label>
-            <select id="super-admin-payment-select" class="form-select">
-                <option value="">Bitte wählen...</option>
-                ${options}
-            </select>
-        </div>
-        <button class="btn btn-secondary btn-block" onclick="editSelectedPayment()">Ausgewählten Eintrag bearbeiten</button>
-    `;
-
-    if (allRecords.length > preview.length) {
-        target.innerHTML += `<div style="font-size:0.85rem; color:var(--text-secondary); margin-top:8px;">Es werden die letzten ${preview.length} Einträge angezeigt.</div>`;
+    if (document.getElementById('payment-history')?.classList.contains('active')) {
+        renderHistoryTab(true);
     }
 }
 
@@ -1650,26 +1562,6 @@ window.setSupervisorAdminByIndex = async (index, isAdmin) => {
     const user = superAdminUserRows[index];
     if (!user || !user.uid) return;
     await window.setSupervisorAdmin(user.uid, isAdmin);
-};
-
-window.editRecordedPaymentByIndex = async (index) => {
-    const item = superAdminPaymentRows[index];
-    if (!item) {
-        alert('Der ausgewählte Eintrag wurde nicht gefunden. Bitte Liste aktualisieren.');
-        return;
-    }
-    await window.editRecordedPayment(item.personId, item.paymentId, item.paymentIndex, item.personName, item.type, item.payment);
-};
-
-window.editSelectedPayment = async () => {
-    const select = document.getElementById('super-admin-payment-select');
-    if (!select || !select.value) {
-        alert('Bitte zuerst einen Eintrag auswählen.');
-        return;
-    }
-    const index = parseInt(select.value, 10);
-    if (Number.isNaN(index)) return;
-    await window.editRecordedPaymentByIndex(index);
 };
 
 window.editRecordedPayment = async (personId, paymentId, paymentIndex, personName = null, type = 'payment', paymentObj = null) => {
@@ -2370,18 +2262,18 @@ window.addEventListener('resize', () => {
     }, 100);
 });
 
-window.showTransactionModal = async function(resetLimit = true) {
+window.renderHistoryTab = async function(resetLimit = true) {
     if (resetLimit) {
         transactionPage = 1;
         cachedTransactions = null;
     }
 
-    const modal = document.getElementById('transaction-modal');
-    const container = document.getElementById('full-transaction-list');
+    const container = document.getElementById('history-page-list');
+    if (!container) return;
 
     if (resetLimit) {
         const skeletonHtml = Array(15).fill(`
-            <div class="trans-item" style="pointer-events: none; border-bottom: 1px solid var(--border);">
+            <div class="trans-item" style="pointer-events: none; border-bottom: 1px solid var(--border); padding: 15px;">
                 <div class="trans-left" style="gap: 6px;">
                     <div class="skeleton" style="width: 140px; height: 16px;"></div>
                     <div class="skeleton" style="width: 100px; height: 12px; margin-top: 4px;"></div>
@@ -2390,10 +2282,6 @@ window.showTransactionModal = async function(resetLimit = true) {
             </div>
         `).join('');
         container.innerHTML = skeletonHtml;
-    }
-
-    if (!modal?.classList.contains('show')) {
-        openModal('transaction-modal');
     }
 
     try {
@@ -2409,9 +2297,11 @@ window.showTransactionModal = async function(resetLimit = true) {
         transactionTotalItems = data.totalItems;
 
         if (!cachedTransactions || cachedTransactions.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">Keine Buchungen vorhanden.</div>';
+            container.innerHTML = '<div style="text-align:center; padding:30px 20px; color:var(--text-secondary);">Keine Buchungen vorhanden.</div>';
             return;
         }
+
+        const isSuperAdmin = isSuperAdminUser();
 
         let html = cachedTransactions.map(t => {
             const isExp = t.type === 'exp';
@@ -2419,27 +2309,39 @@ window.showTransactionModal = async function(resetLimit = true) {
             const sign = isExp ? '-' : '+';
             const icon = t.type === 'pay' ? '👤' : (t.type === 'don' ? '💝' : '💸');
             const hasReceipt = t.receipt ? '<span style="margin-left:5px" title="Beleg vorhanden">📷</span>' : '';
+
+            const paymentPayload = t.payment ? JSON.stringify(t.payment).replace(/"/g, '&quot;') : '{}';
+
+            const editBtn = isSuperAdmin ? `
+                <button class="btn btn-secondary btn-small" style="padding: 6px; border-radius: 8px; margin-left: 10px;" data-payload="${paymentPayload}" onclick="event.stopPropagation(); editRecordedPayment('${escapeHtml(String(t.personId || ''))}', '${escapeHtml(String(t.paymentId || ''))}', ${t.paymentIndex}, '${escapeHtml(String(t.personName || ''))}', '${escapeHtml(String(t.type || ''))}', JSON.parse(this.dataset.payload))" aria-label="Bearbeiten">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </button>
+            ` : '';
+
             return `
-                <div class="trans-item" role="button" tabindex="0" onclick="showTransactionDetails('${t.id}', '${t.type}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails('${t.id}', '${t.type}')}" style="cursor:pointer;">
-                    <div class="trans-left">
+                <div class="trans-item" role="button" tabindex="0" onclick="showTransactionDetails('${t.id}', '${t.type}')" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails('${t.id}', '${t.type}')}" style="cursor:pointer; padding: 15px; border-bottom: 1px solid var(--border);">
+                    <div class="trans-left" style="flex: 1;">
                         <span style="font-weight:600;">${icon} ${t.who}</span>
                         <div class="trans-meta">${t.description || '-'} ${hasReceipt} • ${t.date ? dateFormatter.format(new Date(t.date)) : 'Kein Datum'}</div>
                     </div>
-                    <div class="trans-amount ${color}">${sign}${formatCurrency(t.amount)}€</div>
+                    <div style="display: flex; align-items: center;">
+                        <div class="trans-amount ${color}" style="font-size: 1.1rem;">${sign}${formatCurrency(t.amount)}€</div>
+                        ${editBtn}
+                    </div>
                 </div>
             `;
         }).join('');
 
         if (cachedTransactions.length < transactionTotalItems) {
             html += `
-                <div style="text-align:center; padding:10px;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 10px;">Es werden ${cachedTransactions.length} von ${transactionTotalItems} Buchungen angezeigt.</div>
-                    <button class="btn btn-secondary" onclick="loadMoreTransactions()">Mehr laden...</button>
+                <div style="text-align:center; padding:20px;">
+                    <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 12px;">Es werden ${cachedTransactions.length} von ${transactionTotalItems} Buchungen angezeigt.</div>
+                    <button class="btn btn-secondary" onclick="loadMoreHistory()">Mehr laden...</button>
                 </div>
             `;
         }
 
-        const scrollContainer = container?.closest('.modal-content') || container;
+        const scrollContainer = container.parentElement;
         const previousScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
 
         container.innerHTML = html;
@@ -2449,13 +2351,13 @@ window.showTransactionModal = async function(resetLimit = true) {
         }
     } catch (err) {
         console.error('Fehler beim Laden der Transaktionen:', err);
-        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger);">Fehler beim Laden der Buchungen.</div>';
+        container.innerHTML = '<div style="text-align:center; padding:30px 20px; color:var(--danger);">Fehler beim Laden der Buchungen.</div>';
     }
 };
 
-window.loadMoreTransactions = function() {
+window.loadMoreHistory = function() {
     transactionPage += 1;
-    window.showTransactionModal(false);
+    window.renderHistoryTab(false);
 };
 
 window.addPerson = async () => {
