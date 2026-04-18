@@ -1205,6 +1205,9 @@ async function loadData(silent = false) {
 
         document.getElementById('settings').style.display = 'none';
 
+        const sysSettingsBtn = document.getElementById('profile-sys-settings-btn');
+        if (sysSettingsBtn) sysSettingsBtn.style.display = 'none';
+
         // Populate User View basic info
         document.getElementById('user-name-display').innerText = `${currentUser.firstName} ${currentUser.lastName}`;
         document.getElementById('user-email-display').innerText = currentUser.email;
