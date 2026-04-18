@@ -2200,12 +2200,26 @@ async function renderStats() {
 
         const totalMembers = people.length;
         let totalOverdue = 0;
+        let overdueCount = 0;
+        let goodCount = 0;
+
         people.forEach(p => {
-            totalOverdue += (p._overdueAmount || 0);
+            if (p._overdueAmount && p._overdueAmount > 0) {
+                totalOverdue += p._overdueAmount;
+                overdueCount++;
+            } else {
+                goodCount++;
+            }
         });
 
-        document.getElementById('totalMembers').textContent = totalMembers;
-        document.getElementById('totalOverdue').textContent = currencyFormatter.format(totalOverdue);
+        const membersEl = document.getElementById('totalMembers');
+        if (membersEl) membersEl.textContent = `${goodCount} / ${totalMembers}`;
+
+        const overdueEl = document.getElementById('totalOverdue');
+        if (overdueEl) overdueEl.textContent = overdueCount;
+
+        const overdueAmountEl = document.getElementById('totalOverdueAmount');
+        if (overdueAmountEl) overdueAmountEl.textContent = currencyFormatter.format(totalOverdue);
 
         if (data.chartData && Array.isArray(data.chartData.dataPoints)) {
             chartDataCache = {
