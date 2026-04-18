@@ -252,18 +252,18 @@ window.switchTab = function(tabName, btn) {
     // Hide only the tab contents inside the current scope (admin vs user)
     scope.querySelectorAll('.tab-content').forEach(el => {
         el.classList.remove('active');
-        if (el.id === 'payment-history') el.style.display = 'none';
+        if (el.id === 'payment-history' || el.id === 'user-history' || el.id === 'user-requests') el.style.display = 'none';
     });
 
     // Show the selected tab content only if it belongs to the same scope
     const targetContent = document.getElementById(tabName);
     if (targetContent && scope.contains(targetContent)) {
         targetContent.classList.add('active');
-        if (tabName === 'payment-history') targetContent.style.display = 'block';
+        if (tabName === 'payment-history' || tabName === 'user-history' || tabName === 'user-requests') targetContent.style.display = 'block';
     }
 
     const navSelector = isUserNav
-        ? '#user-desktop-nav [data-tab]'
+        ? '#user-desktop-nav [data-tab], #user-bottom-nav [data-tab]'
         : '#admin-desktop-nav [data-tab], #admin-bottom-nav [data-tab]';
     const navButtons = document.querySelectorAll(navSelector);
     navButtons.forEach(el => {
@@ -1201,7 +1201,7 @@ async function loadData(silent = false) {
         const adminBottomNav = document.getElementById('admin-bottom-nav');
         if(adminBottomNav) adminBottomNav.style.display = 'none';
         const userBottomNav = document.getElementById('user-bottom-nav');
-        if(userBottomNav) userBottomNav.style.display = 'none'; // Replaced by profile dropdown
+        if(userBottomNav) userBottomNav.style.display = 'flex';
 
         document.getElementById('settings').style.display = 'none';
 
