@@ -24,6 +24,7 @@ let sseConnection = null;
 let aiEnabled = false;
 let aiMessages = [];
 let aiStreaming = false;
+const MAX_AI_CHAT_INPUT_HEIGHT = 120;
 
 function connectSSE() {
     if (sseConnection) return;
@@ -3021,7 +3022,7 @@ window.clearAiChat = () => {
 function adjustAiInputHeight(inputEl) {
     if (!inputEl) return;
     inputEl.style.height = 'auto';
-    inputEl.style.height = `${Math.min(inputEl.scrollHeight, 120)}px`;
+    inputEl.style.height = `${Math.min(inputEl.scrollHeight, MAX_AI_CHAT_INPUT_HEIGHT)}px`;
 }
 
 window.handleAiChatInput = (event) => {
