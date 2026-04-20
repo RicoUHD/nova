@@ -24,6 +24,7 @@ let sseConnection = null;
 let aiEnabled = false;
 let aiMessages = [];
 let aiStreaming = false;
+const MAX_AI_CHAT_INPUT_HEIGHT = 120;
 
 function connectSSE() {
     if (sseConnection) return;
@@ -264,6 +265,14 @@ window.switchTab = function(tabName, btn) {
     if (appContainer) {
         const isAiChatActive = !isUserNav && tabName === 'ai-chat';
         appContainer.classList.toggle('ai-chat-active', isAiChatActive);
+        if (isAiChatActive) {
+            requestAnimationFrame(() => {
+                const inputEl = document.getElementById('ai-chat-input');
+                adjustAiInputHeight(inputEl);
+                const messagesEl = document.getElementById('ai-chat-messages');
+                if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+            });
+        }
     }
 
     const navSelector = isUserNav
@@ -3010,6 +3019,17 @@ window.clearAiChat = () => {
         </div>`;
 };
 
+function adjustAiInputHeight(inputEl) {
+    if (!inputEl) return;
+    inputEl.style.height = 'auto';
+    inputEl.style.height = `${Math.min(inputEl.scrollHeight, MAX_AI_CHAT_INPUT_HEIGHT)}px`;
+}
+
+window.handleAiChatInput = (event) => {
+    if (!event || !event.target) return;
+    adjustAiInputHeight(event.target);
+};
+
 window.handleAiChatKey = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -3269,7 +3289,7 @@ window.sendAiMessage = async () => {
     if (!text) return;
 
     inputEl.value = '';
-    inputEl.style.height = '';
+    adjustAiInputHeight(inputEl);
 
     aiMessages.push({ role: 'user', content: text });
     appendAiMessage('user', text);
@@ -3371,6 +3391,11 @@ window.sendAiMessage = async () => {
         if (sendBtn) sendBtn.disabled = false;
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const inputEl = document.getElementById('ai-chat-input');
+    if (inputEl) adjustAiInputHeight(inputEl);
+});
 
 window.uploadChurchLogo = async () => {
     if (!isSuperAdminUser()) return;
