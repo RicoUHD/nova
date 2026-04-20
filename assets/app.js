@@ -3026,7 +3026,8 @@ function adjustAiInputHeight(inputEl) {
 }
 
 window.handleAiChatInput = (event) => {
-    adjustAiInputHeight(event?.target);
+    if (!event || !event.target) return;
+    adjustAiInputHeight(event.target);
 };
 
 window.handleAiChatKey = (event) => {
@@ -3392,7 +3393,8 @@ window.sendAiMessage = async () => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    adjustAiInputHeight(document.getElementById('ai-chat-input'));
+    const inputEl = document.getElementById('ai-chat-input');
+    if (inputEl) adjustAiInputHeight(inputEl);
 });
 
 window.uploadChurchLogo = async () => {
