@@ -38,12 +38,13 @@ async function setAiSettings(appConfig, patch) {
  */
 async function buildDatabaseSnapshot(appConfig) {
   try {
-    const [people, expenses, users, settings, requests] = await Promise.all([
+    const [people, expenses, users, settings, requests, donations] = await Promise.all([
       listPeopleRecords(appConfig).catch(() => []),
       listExpenseRecords(appConfig).catch(() => []),
       listUserRecords(appConfig).catch(() => []),
       getStateValue(appConfig, 'settings', {}).catch(() => ({})),
-      listRequestRecords(appConfig).catch(() => [])
+      listRequestRecords(appConfig).catch(() => []),
+      getStateValue(appConfig, 'donations', {}).catch(() => ({}))
     ]);
 
     // Aggregate summary statistics
@@ -131,6 +132,7 @@ async function buildDatabaseSnapshot(appConfig) {
       },
       members: memberRecords,
       expenses: expenseRecords,
+      donations: donations,
       requests: requestRecords,
       users: userRecords
     };
