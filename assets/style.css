@@ -1438,6 +1438,18 @@ input:checked + .slider:before { transform: translateX(22px); }
     #ai-chat {
         max-width: 800px;
         margin: 0 auto;
+        padding-bottom: 100px;
+    }
+
+    #ai-chat .ai-chat-input-styled {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: calc(100% - 40px);
+        max-width: 800px;
+        z-index: 100;
+        box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
     }
 }
 
