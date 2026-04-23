@@ -34,8 +34,7 @@ async function setAiSettings(appConfig, patch) {
 
 /**
  * Builds a full database context snapshot for the AI system prompt.
- * Includes all member, expense, and pending request records.
- * Sensitive fields (passwords, tokens, emails, user IDs, receipt URLs) are excluded.
+ * Includes all member, expense, request, and user records.
  */
 async function buildDatabaseSnapshot(appConfig) {
   try {
@@ -93,16 +92,26 @@ async function buildDatabaseSnapshot(appConfig) {
       description: e.description || ''
     }));
 
-    // Include only pending requests (no userId)
-    const pendingRequests = requests
-      .filter((r) => r.status === 'pending')
-      .map((r) => ({
+    // Include all requests (no userId)
+    const requestRecords = requests.map((r) => ({
         id: r.requestKey,
         type: r.type || '',
         personName: r.personName || '',
+        status: r.status || '',
         timestamp: r.timestamp || null,
         data: r.data || {}
-      }));
+    }));
+
+    // Include user records (strip password, token, etc)
+    const userRecords = users.map((u) => ({
+        id: u.id,
+        name: u.name || '',
+        firstName: u.firstName || '',
+        lastName: u.lastName || '',
+        email: u.email || '',
+        admin: u.admin,
+        superAdmin: u.superAdmin
+    }));
 
     const snapshot = {
       summary: {
@@ -122,7 +131,8 @@ async function buildDatabaseSnapshot(appConfig) {
       },
       members: memberRecords,
       expenses: expenseRecords,
-      pendingRequests
+      requests: requestRecords,
+      users: userRecords
     };
 
     return JSON.stringify(snapshot, null, 2);
