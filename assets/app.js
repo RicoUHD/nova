@@ -1911,7 +1911,7 @@ function renderUserView() {
     `;
 
     // User Requests List
-    const myRequests = requests.filter(r => r.userId === currentUser.uid && r.status !== 'approved').sort((a,b) => b.timestamp - a.timestamp);
+    const myRequests = requests.filter(r => r.userId === currentUser.uid).sort((a,b) => b.timestamp - a.timestamp);
     const reqList = document.getElementById('user-requests-list');
 
     if(myRequests.length > 0) {
@@ -1921,6 +1921,10 @@ function renderUserView() {
                 statusBadge = '❌';
                 statusBg = '#ef444415';
                 statusText = 'Abgelehnt';
+            } else if(req.status === 'approved') {
+                statusBadge = '✅';
+                statusBg = '#10b98115'; // A soft green background
+                statusText = 'Genehmigt';
             } else {
                 statusBadge = '⏳';
                 statusBg = '#f59e0b15';
