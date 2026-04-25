@@ -1880,7 +1880,7 @@ function renderUserView() {
         <!-- Status Hero Card -->
         <div class="user-hero-status ${statusClass}">
             <h2 style="color: ${statusColor}; font-size: 1.25rem; font-weight: 800; margin-bottom: 5px;">
-                ${statusMeta.isOverdue ? 'Zahlung überfällig' : (statusMeta.isSoonDue ? 'Bald fällig' : 'Alles in Ordnung')}
+                ${statusMeta.text}
             </h2>
             ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `<div style="font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 5px;">Bezahlt bis <strong>${dateText}</strong></div>`}
             ${statusMeta.isOverdue ? `
