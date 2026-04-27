@@ -54,6 +54,15 @@
     --border: #475569;
     --border-light: #334155; /* Better separation */
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+
+    /* Dark mode overrides for desktop header */
+    --desktop-header-bg: var(--surface);
+    --desktop-header-border: var(--border);
+    --desktop-nav-text: var(--text-secondary);
+    --desktop-nav-active: var(--text);
+    --desktop-nav-underline: var(--primary);
+    --desktop-profile-border: var(--border);
+    --desktop-profile-text: var(--text);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; scrollbar-width: none; }
