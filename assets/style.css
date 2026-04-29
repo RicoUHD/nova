@@ -900,7 +900,7 @@ input:checked + .slider:before { transform: translateX(22px); }
     /* Dashboard Grid Layout */
     .dashboard-top-section {
         display: grid;
-        grid-template-columns: 400px 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 50px;
         align-items: stretch;
         margin-bottom: 40px;
