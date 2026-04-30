@@ -295,6 +295,35 @@ window.switchTab = function(tabName, btn) {
     }
 };
 
+window.filterPeople = function() {
+    const query = document.getElementById('people-search')?.value.toLowerCase() || '';
+    const items = document.querySelectorAll('.person-wrapper');
+    items.forEach(item => {
+        const nameEl = item.querySelector('.person-name');
+        if (nameEl && nameEl.textContent.toLowerCase().includes(query)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+};
+
+window.filterHistory = function() {
+    const query = document.getElementById('history-search')?.value.toLowerCase() || '';
+    const container = document.getElementById('history-page-list');
+    if (!container) return;
+
+    const items = container.querySelectorAll('.trans-item');
+    items.forEach(item => {
+        const leftEl = item.querySelector('.trans-left');
+        if (leftEl && leftEl.textContent.toLowerCase().includes(query)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+};
+
 window.toggleProfileMenu = function() {
     const menu = document.getElementById('profileDropdown');
     const btn = document.querySelector('.profile-btn');
