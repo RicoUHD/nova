@@ -289,7 +289,11 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'];
+
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only JPG, PNG, WEBP, GIF, HEIC, and HEIF are allowed.'));
