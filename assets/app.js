@@ -1051,7 +1051,7 @@ function generateStatusHistoryHTML(person) {
     let html = `
         <div class="trans-item" style="background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2);">
             <div class="trans-left">
-                <span style="font-weight:600;">${statusLabels[person.status] || person.status}</span>
+                <span style="font-weight:600;">${escapeHtml(statusLabels[person.status] || person.status)}</span>
                 <div class="trans-meta">Seit ${dateFormatter.format(new Date(currentStatusStart))} • Aktuell</div>
             </div>
             <div style="font-size:0.75rem; color:var(--success); font-weight:600;">AKTIV</div>
@@ -1070,7 +1070,7 @@ function generateStatusHistoryHTML(person) {
         return `
             <div class="trans-item">
                 <div class="trans-left">
-                    <span>${statusLabels[entry.status] || entry.status}</span>
+                    <span>${escapeHtml(statusLabels[entry.status] || entry.status)}</span>
                     <div class="trans-meta">${start} – ${end}</div>
                 </div>
                 <div style="font-size:0.8rem; color:var(--text-secondary);">${formatCurrency(rate)}€/Monat</div>
@@ -1962,7 +1962,7 @@ function renderUserView() {
         <!-- Status Hero Card -->
         <div class="user-hero-status ${statusClass}">
             <h2 style="color: ${statusColor}; font-size: 1.25rem; font-weight: 800; margin-bottom: 5px;">
-                ${statusMeta.text}
+                ${escapeHtml(statusMeta.text)}
             </h2>
             ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `<div style="font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 5px;">Bezahlt bis <strong>${dateText}</strong></div>`}
             ${statusMeta.isOverdue ? `
@@ -1980,7 +1980,7 @@ function renderUserView() {
             </div>
             <div class="user-info-box">
                 <div class="user-info-box-label">Aktueller Status</div>
-                <div class="user-info-box-value">${statusLabels[currentStatus] || currentStatus}</div>
+                <div class="user-info-box-value">${escapeHtml(statusLabels[currentStatus] || currentStatus)}</div>
             </div>
         </div>
     `;
@@ -2148,7 +2148,7 @@ function generateTimelineHTML(person) {
         if (event.type === 'status') {
             const label = statusLabels[event.status] || event.status;
             content = `
-                <div style="font-weight: 600;">Statusänderung: ${label}</div>
+                <div style="font-weight: 600;">Statusänderung: ${escapeHtml(label)}</div>
                 <div style="font-size: 0.85rem; color: var(--text-secondary);">Gültig ab ${dateStr}</div>
             `;
         } else {
@@ -2228,11 +2228,11 @@ function generatePersonHTML(p, preCalcData = null) {
                             ${escapeHtml(p.name)}
                             <span class="chevron">›</span>
                         </div>
-                        <span class="person-status">${currentStatus}</span>
+                        <span class="person-status">${escapeHtml(currentStatus)}</span>
                     </div>
                     <div class="person-right">
                         ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `<span class="payment-pill ${pillClass}">${dateText}</span>`}
-                        <span class="time-remaining">${statusMeta.text}</span>
+                        <span class="time-remaining">${escapeHtml(statusMeta.text)}</span>
                     </div>
                 </div>
             </div>
