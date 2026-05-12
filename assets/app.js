@@ -264,7 +264,6 @@ window.switchTab = function(tabName, btn) {
     // Hide only the tab contents inside the current scope (admin vs user)
     scope.querySelectorAll('.tab-content').forEach(el => {
         el.classList.remove('active', 'slide-in-right', 'slide-in-left');
-        if (el.id === 'payment-history' || el.id === 'user-history' || el.id === 'user-requests') el.style.display = 'none';
     });
 
     // Show the selected tab content only if it belongs to the same scope
@@ -281,8 +280,6 @@ window.switchTab = function(tabName, btn) {
         } else {
             targetContent.classList.add('slide-in-right'); // fallback
         }
-
-        if (tabName === 'payment-history' || tabName === 'user-history' || tabName === 'user-requests') targetContent.style.display = 'block';
     }
 
     const appContainer = document.querySelector('.container');
@@ -299,11 +296,11 @@ window.switchTab = function(tabName, btn) {
         }
     }
 
-    const allNavSelector = isUserNav
+    const navSelector = isUserNav
         ? '#user-desktop-nav [data-tab], #user-bottom-nav [data-tab]'
         : '#admin-desktop-nav [data-tab], #admin-bottom-nav [data-tab]';
-    const allNavButtons = document.querySelectorAll(allNavSelector);
-    allNavButtons.forEach(el => {
+    const navButtons = document.querySelectorAll(navSelector);
+    navButtons.forEach(el => {
         const isActive = el.dataset.tab === tabName;
         if (isActive) {
             el.classList.add('active');
