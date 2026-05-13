@@ -278,7 +278,7 @@ const storage = multer.diskStorage({
           const counters = matchingFiles.map((entry) => {
             const parts = entry.replace(ext, '').split('-');
             const lastPart = parts[parts.length - 1];
-            return /^\\d+$/.test(lastPart) ? parseInt(lastPart, 10) : 0;
+            return /^\d+$/.test(lastPart) ? parseInt(lastPart, 10) : 0;
           });
           counter = Math.max(...counters) + 1;
         }
