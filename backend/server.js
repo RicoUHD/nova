@@ -805,6 +805,9 @@ async function writeLogicalPath(targetPath, value, user, method = 'set') {
       }
     }
     const existing = await getRequestRecord(appConfig, id);
+    if (existing && existing.data && !user.admin && existing.data.userId !== user.uid) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
     const nextValue = method === 'patch' && existing?.data && value && typeof value === 'object'
       ? { ...existing.data, ...value }
       : value;
