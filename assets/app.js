@@ -464,6 +464,12 @@ window.openModal = (id) => {
 
     // Store current focus on the modal instance itself to handle nesting
     modal._returnFocusTo = document.activeElement;
+
+    // Dynamically increase z-index for nested modals to guarantee correct stacking order
+    const baseZIndex = 2000;
+    const currentStackDepth = (window._modalStack || []).length;
+    modal.style.zIndex = baseZIndex + (currentStackDepth * 10);
+
     modal.classList.add('show');
 
     // Removed automatic focus management to prevent soft keyboard from popping up on mobile devices
@@ -499,6 +505,7 @@ window.closeModal = (id, fromPopstate = false) => {
     }
 
     modal.classList.remove('show');
+    modal.style.zIndex = ''; // Reset z-index to default CSS/inline style
 
     if (modal._escHandler) {
         document.removeEventListener('keydown', modal._escHandler);
@@ -1705,7 +1712,7 @@ window.setSupervisorAdminByIndex = async (index, isAdmin) => {
 };
 
 window.editRecordedPayment = async (personId, paymentId, paymentIndex, personName = null, type = 'payment', paymentObj = null) => {
-    if (!isSuperAdminUser()) return;
+    if (!(currentUser && currentUser.admin)) return;
 
     let payment = paymentObj;
     let targetIndex = paymentIndex;
@@ -1754,7 +1761,7 @@ window.editRecordedPayment = async (personId, paymentId, paymentIndex, personNam
 };
 
 window.saveEditedPayment = async () => {
-    if (!isSuperAdminUser() || !currentEditedPayment) return;
+    if (!(currentUser && currentUser.admin) || !currentEditedPayment) return;
 
     const amount = parseFloat(String(document.getElementById('edit-payment-amount').value || '').replace(',', '.'));
     const date = document.getElementById('edit-payment-date').value;
@@ -1820,6 +1827,53 @@ window.saveEditedPayment = async () => {
     } catch (err) {
         console.error('Fehler beim Bearbeiten:', err);
         showToast('Eintrag konnte nicht aktualisiert werden', 'error');
+    }
+};
+
+window.deleteRecordedPaymentClick = () => {
+    if (!(currentUser && currentUser.admin) || !currentEditedPayment) return;
+    openModal('confirm-delete-modal');
+};
+
+window.confirmDeleteRecordedPayment = async () => {
+    if (!(currentUser && currentUser.admin) || !currentEditedPayment) return;
+
+    closeModal('confirm-delete-modal');
+    closeModal('edit-payment-modal');
+
+    try {
+        if (currentEditedPayment.type === 'payment') {
+            await mutatePerson(currentEditedPayment.personId, (draft) => {
+                const nextPayments = safeList(draft.payments).filter((entry, i) => {
+                    return i !== currentEditedPayment.targetIndex;
+                });
+                const totalPaid = calculateTotalPaidLoop(nextPayments);
+                return { ...draft, payments: nextPayments, totalPaid };
+            });
+            showToast('Zahlung gelöscht');
+        } else if (currentEditedPayment.type === 'donation') {
+            const remoteDonations = safeList(await apiGet('donations').catch(() => []));
+            const targetDonationId = currentEditedPayment.paymentId;
+            const nextDonations = remoteDonations.filter(d => String(d.id) !== String(targetDonationId));
+            await set(ref(db, 'donations'), nextDonations);
+            donations = nextDonations;
+            showToast('Spende gelöscht');
+        } else if (currentEditedPayment.type === 'expense') {
+            const remoteExpenses = safeList(await apiGet('expenses').catch(() => []));
+            const targetExpenseId = currentEditedPayment.paymentId;
+            const nextExpenses = remoteExpenses.filter(e => String(e.id) !== String(targetExpenseId));
+            await set(ref(db, 'expenses'), nextExpenses);
+            expenses = nextExpenses;
+            showToast('Ausgabe gelöscht');
+        }
+
+        currentEditedPayment = null;
+        renderPeople();
+        renderStats();
+        renderSuperAdminPaymentEditor();
+    } catch (err) {
+        console.error('Fehler beim Löschen:', err);
+        showToast('Eintrag konnte nicht gelöscht werden', 'error');
     }
 };
 
@@ -2458,7 +2512,7 @@ window.renderHistoryTab = async function(resetLimit = true) {
             return;
         }
 
-        const isSuperAdmin = isSuperAdminUser();
+        const isSuperAdmin = !!(currentUser && currentUser.admin);
 
         let lastDateFormatted = null;
         let html = '';
