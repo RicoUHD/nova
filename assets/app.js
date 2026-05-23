@@ -1741,15 +1741,22 @@ window.editRecordedPayment = async (personId, paymentId, paymentIndex, personNam
 
     if (type === 'payment') {
         const person = people.find(p => String(p.id) === String(personId));
-        if (!person) return;
-
-        const payments = safeList(person.payments);
-        const idx = payments.findIndex((p, i) => String(p.id ?? `idx-${i}`) === String(paymentId));
-        targetIndex = idx >= 0 ? idx : paymentIndex;
-        payment = payments[targetIndex];
+        if (person) {
+            const payments = safeList(person.payments);
+            const idx = payments.findIndex((p, i) => String(p.id ?? `idx-${i}`) === String(paymentId));
+            targetIndex = idx >= 0 ? idx : paymentIndex;
+            payment = payments[targetIndex] || paymentObj; // Resilient fallback
+        } else {
+            // Fallback for logically deleted/archived members who are not in the active people list
+            targetIndex = paymentIndex;
+            payment = paymentObj;
+        }
     }
 
-    if (!payment) return;
+    if (!payment) {
+        console.error("editRecordedPayment: No payment structure resolved.", { personId, paymentId, paymentIndex, type, paymentObj });
+        return;
+    }
 
     currentEditedPayment = { personId, targetIndex, type, paymentId };
 
@@ -1773,13 +1780,30 @@ window.editRecordedPayment = async (personId, paymentId, paymentIndex, personNam
     } else {
         if (issuerGroup) issuerGroup.style.display = 'none';
         if (issuerEl) issuerEl.value = '';
-        if (type === 'donation' && descEl) {
-            // Donations don't have a separate description field in the form traditionally, but we might have mapped it.
-            // If we use 'name' for donations, it was passed as personName.
-        }
     }
 
     openModal('edit-payment-modal');
+};
+
+window.editRecordedPaymentByIndex = function(index) {
+    if (!cachedTransactions || !cachedTransactions[index]) {
+        console.error("editRecordedPaymentByIndex: Transaction not found at index", index);
+        return;
+    }
+    const t = cachedTransactions[index];
+    let mappedType = t.type;
+    if (t.type === 'pay') mappedType = 'payment';
+    else if (t.type === 'don') mappedType = 'donation';
+    else if (t.type === 'exp') mappedType = 'expense';
+
+    window.editRecordedPayment(
+        t.personId || null,
+        t.paymentId || null,
+        t.paymentIndex !== undefined ? t.paymentIndex : -1,
+        t.personName || t.who || null,
+        mappedType,
+        t.payment || null
+    );
 };
 
 window.saveEditedPayment = async () => {
@@ -1808,10 +1832,16 @@ window.saveEditedPayment = async () => {
     try {
         if (currentEditedPayment.type === 'payment') {
             await mutatePerson(currentEditedPayment.personId, (draft) => {
-                const nextPayments = safeList(draft.payments).map((entry, i) => {
-                    if (i !== currentEditedPayment.targetIndex) return entry;
-                    return { ...entry, amount, date, description };
-                });
+                const nextPayments = safeList(draft.payments);
+                let targetIdx = currentEditedPayment.targetIndex;
+                if (targetIdx < 0 || targetIdx >= nextPayments.length) {
+                    targetIdx = nextPayments.findIndex((entry, i) => String(entry.id ?? `idx-${i}`) === String(currentEditedPayment.paymentId));
+                }
+                if (targetIdx >= 0 && targetIdx < nextPayments.length) {
+                    nextPayments[targetIdx] = { ...nextPayments[targetIdx], amount, date, description };
+                } else {
+                    console.warn("saveEditedPayment: fallback payment match not found, mapping all", currentEditedPayment);
+                }
                 const totalPaid = calculateTotalPaidLoop(nextPayments);
                 return { ...draft, payments: nextPayments, totalPaid };
             });
@@ -1823,7 +1853,6 @@ window.saveEditedPayment = async () => {
 
             if (idx >= 0) {
                 remoteDonations[idx] = { ...remoteDonations[idx], amount, date };
-                // Keep the description if mapped or fallback
                 await set(ref(db, 'donations'), { ...remoteDonations });
                 donations = remoteDonations;
             }
@@ -1867,7 +1896,9 @@ window.confirmDeleteRecordedPayment = async () => {
         if (currentEditedPayment.type === 'payment') {
             await mutatePerson(currentEditedPayment.personId, (draft) => {
                 const nextPayments = safeList(draft.payments).filter((entry, i) => {
-                    return i !== currentEditedPayment.targetIndex;
+                    if (i === currentEditedPayment.targetIndex) return false;
+                    if (String(entry.id ?? `idx-${i}`) === String(currentEditedPayment.paymentId)) return false;
+                    return true;
                 });
                 const totalPaid = calculateTotalPaidLoop(nextPayments);
                 return { ...draft, payments: nextPayments, totalPaid };
@@ -2313,12 +2344,7 @@ function generatePersonHTML(p, preCalcData = null) {
                 </div>
             </div>
             <div id="drawer-${p.id}" class="person-details">
-                <div class="details-content" style="position: relative;">
-                    ${(currentUser && currentUser.admin) ? `
-                    <button class="delete-person-btn" data-id="${escapeHtml(p.id)}" onclick="deletePersonClick(this.dataset.id)" aria-label="Mitglied löschen" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: var(--danger); padding: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; z-index: 10;" onmouseover="this.style.opacity=0.7" onmouseout="this.style.opacity=1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
-                    ` : ''}
+                <div class="details-content">
 
                     <div class="details-status-card ${cardClass}">
                         ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `
@@ -2360,6 +2386,13 @@ function generatePersonHTML(p, preCalcData = null) {
                     <div class="history-header">Verlauf</div>
                     <div id="timeline-${p.id}">
                         <div style="padding:10px; color:var(--text-secondary); font-size:0.8rem; font-style:italic;">Lade Verlauf...</div>
+                    </div>
+
+                    <div style="display: ${!(currentUser && currentUser.admin) ? 'none' : 'flex'}; justify-content: flex-end; margin-top: 20px;">
+                        <button class="btn btn-secondary btn-small" style="border-color: var(--danger); color: var(--danger); font-size: 0.85rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;" data-id="${escapeHtml(p.id)}" onclick="deletePersonClick(this.dataset.id)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Mitglied löschen
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2571,22 +2604,9 @@ window.renderHistoryTab = async function(resetLimit = true) {
 
             const hasReceipt = t.receipt ? '<span style="margin-left:5px" title="Beleg vorhanden">📷</span>' : '';
 
-            const paymentPayload = t.payment ? JSON.stringify(t.payment).replace(/"/g, '&quot;') : '{}';
-
-            let mappedType = t.type;
-            if (t.type === 'pay') mappedType = 'payment';
-            else if (t.type === 'don') mappedType = 'donation';
-            else if (t.type === 'exp') mappedType = 'expense';
-
             const editBtn = isSuperAdmin ? `
                 <button class="btn btn-secondary btn-small" style="padding: 6px; border-radius: 8px; margin-left: 10px;"
-                    data-payload="${paymentPayload}"
-                    data-person-id="${escapeHtml(String(t.personId || ''))}"
-                    data-payment-id="${escapeHtml(String(t.paymentId || ''))}"
-                    data-payment-index="${t.paymentIndex !== undefined ? t.paymentIndex : -1}"
-                    data-person-name="${escapeHtml(String(t.personName || ''))}"
-                    data-mapped-type="${escapeHtml(mappedType)}"
-                    onclick="event.stopPropagation(); editRecordedPayment(this.dataset.personId, this.dataset.paymentId, parseInt(this.dataset.paymentIndex, 10), this.dataset.personName, this.dataset.mappedType, JSON.parse(this.dataset.payload))"
+                    onclick="event.stopPropagation(); editRecordedPaymentByIndex(${index})"
                     aria-label="Bearbeiten">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 </button>
@@ -3814,9 +3834,15 @@ function replacePersonInMemory(person) {
     preprocessPerson(person);
     const idx = people.findIndex(p => String(p.id) === String(person.id));
     if (idx >= 0) {
-        people[idx] = person;
+        if (person.isDeleted) {
+            people.splice(idx, 1);
+        } else {
+            people[idx] = person;
+        }
     } else {
-        people.push(person);
+        if (!person.isDeleted) {
+            people.push(person);
+        }
     }
 }
 
