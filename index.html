@@ -787,6 +787,18 @@
     </div>
 </div>
 
+<div id="confirm-delete-person-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="title-confirm-delete-person" style="z-index: 3000;">
+    <div class="modal-content" style="max-width: 400px; text-align: center; padding: 25px;">
+        <div style="font-size: 2.5rem; margin-bottom: 15px; color: var(--danger);">⚠️</div>
+        <h3 id="title-confirm-delete-person" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 10px; color: var(--text);">Mitglied löschen?</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 25px;">Sind Sie sicher, dass Sie dieses Mitglied deaktivieren und den Login-Account löschen möchten? Die Zahlungen und das Profilbild bleiben in der Historie erhalten.</p>
+        <div style="display: flex; gap: 12px;">
+            <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('confirm-delete-person-modal')">Abbrechen</button>
+            <button class="btn btn-danger" style="flex: 1; background-color: var(--danger); color: white;" onclick="confirmDeletePerson()">Löschen</button>
+        </div>
+    </div>
+</div>
+
 <div id="add-donation-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="title-add-donation">
     <div class="modal-content">
         <div class="modal-header"><span id="title-add-donation">Spende</span> <button class="close-btn" onclick="closeModal('add-donation-modal')" aria-label="Schließen">&times;</button></div>

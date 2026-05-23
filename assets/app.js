@@ -1271,7 +1271,7 @@ async function loadData(silent = false) {
                 }
             }
         }
-        people = peopleList;
+        people = peopleList.filter(p => !p.isDeleted);
 
         // 3. Fetch User's Requests
         const requestsRef = child(dbRef, 'requests');
@@ -1326,7 +1326,7 @@ async function loadData(silent = false) {
             apiGet('users').catch(() => null)
         ]);
 
-        people = safeList(pData);
+        people = safeList(pData).filter(p => !p.isDeleted);
         // We no longer need to load all donations and expenses on startup for the Admin!
         // The stats endpoint and transaction pagination handle this data now.
         donations = [];
@@ -2327,6 +2327,10 @@ function generatePersonHTML(p, preCalcData = null) {
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                                 E-Mail
                             </button>
+                            <button class="btn btn-secondary text-danger" style="border-color: var(--danger); color: var(--danger);" data-id="${escapeHtml(p.id)}" onclick="deletePersonClick(this.dataset.id)">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                Löschen
+                            </button>
                         </div>
                     </div>
 
@@ -2808,17 +2812,26 @@ window.addExpense = async () => {
     }
 };
 
-window.deletePerson = async (id) => {
-    if(confirm("Wirklich löschen?")) {
-        try {
-            await remove(ref(db, 'people/' + id));
-            people = people.filter(p => String(p.id) !== String(id));
-            await renderAll();
-            showToast('Person gelöscht');
-        } catch (err) {
-            console.error('Fehler beim Löschen der Person:', err);
-            alert('Löschen fehlgeschlagen. Bitte erneut versuchen.');
-        }
+window.deletePersonClick = (id) => {
+    editingPersonId = id;
+    openModal('confirm-delete-person-modal');
+};
+
+window.confirmDeletePerson = async () => {
+    if (!editingPersonId) return;
+
+    closeModal('confirm-delete-person-modal');
+
+    try {
+        await remove(ref(db, 'people/' + editingPersonId));
+        people = people.filter(p => String(p.id) !== String(editingPersonId));
+        await renderAll();
+        showToast('Mitglied erfolgreich gelöscht');
+    } catch (err) {
+        console.error('Fehler beim Löschen der Person:', err);
+        showToast('Mitglied konnte nicht gelöscht werden', 'error');
+    } finally {
+        editingPersonId = null;
     }
 };
 
