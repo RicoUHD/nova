@@ -353,7 +353,11 @@ async function ensureUsersCollection(appConfig) {
       updateRule: 'id = @request.auth.id || @request.auth.admin = true',
       deleteRule: '@request.auth.superAdmin = true',
       fields,
-      indexes: existing.indexes || []
+      indexes: existing.indexes || [],
+      options: {
+        ...existing.options,
+        minPasswordLength: 6
+      }
     }
   });
 }
