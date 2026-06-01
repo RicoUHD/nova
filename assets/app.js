@@ -38,7 +38,11 @@ function parseReceipts(receiptField) {
 }
 
 // --- i18n Translation Engine ---
-let currentLang = localStorage.getItem('app_lang') || 'system';
+let currentLang = localStorage.getItem('app_lang');
+if (!currentLang) {
+    currentLang = 'system';
+    localStorage.setItem('app_lang', 'system');
+}
 let translations = {};
 
 async function loadLanguage(lang) {
@@ -1761,7 +1765,7 @@ function renderUnlinkedUsers() {
         <div class="card" style="margin-bottom:20px;">
             <div class="card-header">${unlinkedTitle}</div>
             <div class="card-body">
-                ${availablePeople.length === 0 ? `<div style="color:var(--text-secondary);">${t('unlinked_no_available_people', 'Keine freien Personen ohne Zuordnung vorhanden.')}</div>` : rows}
+                ${rows}
             </div>
         </div>
     `;
