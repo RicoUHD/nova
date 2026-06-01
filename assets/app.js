@@ -5208,14 +5208,18 @@ window.showToast = (msg, type='success') => {
 
 window.copyInviteCode = async () => {
     const codeInput = document.getElementById('admin-invite-code');
-    if (!codeInput || !codeInput.value) return;
+    if (!codeInput) return;
 
     try {
         await navigator.clipboard.writeText(codeInput.value);
-        showToast("Code kopiert!");
+        if (typeof showToast === 'function') {
+            showToast(t('toast_code_copied', 'Code kopiert!'));
+        } else {
+            alert(t('toast_code_copied', 'Code kopiert!'));
+        }
     } catch (err) {
-        console.error("Copy failed", err);
-        showToast("Kopieren fehlgeschlagen", "error");
+        console.error('Kopieren fehlgeschlagen:', err);
+        alert(t('toast_copy_failed', 'Kopieren fehlgeschlagen'));
     }
 };
 
