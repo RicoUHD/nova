@@ -253,5 +253,13 @@
   "load_more_btn": "Mehr laden...",
   "error_loading_transactions": "Fehler beim Laden der Buchungen.",
   "confirm_delete_so": "Dauerauftrag wirklich komplett entfernen? Historie geht verloren.",
-  "confirm_delete_payment": "Achtung: Soll dieser Eintrag wirklich gelöscht werden? Dies kann nicht rückgängig gemacht werden."
+  "confirm_delete_payment": "Achtung: Soll dieser Eintrag wirklich gelöscht werden? Dies kann nicht rückgängig gemacht werden.",
+  "unlinked_title": "🧩 Nicht zugeordnete Benutzer ({count})",
+  "unlinked_select_person": "Person auswählen",
+  "unlinked_assign_btn": "Zuordnen",
+  "unlinked_no_available_people": "Keine freien Personen ohne Zuordnung vorhanden.",
+  "unlinked_alert_select_person": "Bitte eine Person auswählen.",
+  "unlinked_alert_failed": "Zuordnung fehlgeschlagen. Bitte erneut versuchen.",
+  "btn_install_app": "App installieren",
+  "lang_system": "System"
 }

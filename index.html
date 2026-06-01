@@ -16,14 +16,14 @@
 
 <div id="loading-overlay">
     <div class="spinner"></div>
-    <div id="loading-message" style="font-weight:600; color:#333; margin-top: 20px;">Lade Daten...</div>
+    <div id="loading-message" style="font-weight:600; color:#333; margin-top: 20px;" data-i18n="loading">Lade Daten...</div>
     <div class="loading-footer"><span id="app-name-footer">Nova</span> &copy; 2026</div>
 </div>
 
 <div class="container">
     <button id="install-pwa-btn" class="btn btn-primary" style="display:none; margin-bottom: 20px;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        App installieren
+        <span data-i18n="btn_install_app">App installieren</span>
     </button>
 
     <div class="app-layout">
@@ -300,6 +300,7 @@
                     <div class="form-group">
                         <label class="form-label">Sprache / Language</label>
                         <select id="settings-language" class="form-select" onchange="changeAppLanguage(this.value)">
+                            <option value="system" data-i18n="lang_system">System</option>
                             <option value="de">Deutsch</option>
                             <option value="en">English</option>
                         </select>
@@ -577,6 +578,7 @@
                     <div class="form-group">
                         <label class="form-label" data-i18n="settings_language">Sprache / Language</label>
                         <select id="user-settings-language" class="form-select" onchange="changeAppLanguage(this.value)">
+                            <option value="system" data-i18n="lang_system">System</option>
                             <option value="de">Deutsch</option>
                             <option value="en">English</option>
                         </select>

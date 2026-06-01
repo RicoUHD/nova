@@ -253,5 +253,13 @@
   "load_more_btn": "Load more...",
   "error_loading_transactions": "Error loading transactions.",
   "confirm_delete_so": "Are you sure you want to remove this standing order completely? History will be lost.",
-  "confirm_delete_payment": "Attention: Are you sure you want to delete this entry? This cannot be undone."
+  "confirm_delete_payment": "Attention: Are you sure you want to delete this entry? This cannot be undone.",
+  "unlinked_title": "🧩 Unlinked Users ({count})",
+  "unlinked_select_person": "Select Person",
+  "unlinked_assign_btn": "Assign",
+  "unlinked_no_available_people": "No unlinked people available.",
+  "unlinked_alert_select_person": "Please select a person.",
+  "unlinked_alert_failed": "Assignment failed. Please try again.",
+  "btn_install_app": "Install App",
+  "lang_system": "System"
 }

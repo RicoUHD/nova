@@ -38,16 +38,17 @@ function parseReceipts(receiptField) {
 }
 
 // --- i18n Translation Engine ---
-let currentLang = localStorage.getItem('app_lang');
-if (!currentLang) {
-    const browserLang = (navigator.language || navigator.userLanguage || 'de').toLowerCase();
-    currentLang = browserLang.startsWith('de') ? 'de' : 'en';
-}
+let currentLang = localStorage.getItem('app_lang') || 'system';
 let translations = {};
 
 async function loadLanguage(lang) {
     try {
-        const response = await fetch(`./assets/locales/${lang}.json`);
+        let fetchLang = lang;
+        if (lang === 'system') {
+            const browserLang = (navigator.language || navigator.userLanguage || 'de').toLowerCase();
+            fetchLang = browserLang.startsWith('de') ? 'de' : 'en';
+        }
+        const response = await fetch(`./assets/locales/${fetchLang}.json`);
         translations = await response.json();
         currentLang = lang;
         localStorage.setItem('app_lang', lang);
@@ -1747,19 +1748,20 @@ function renderUnlinkedUsers() {
                     <div style="font-size:0.85rem; color:var(--text-secondary);">${escapeHtml(u.email || '')}</div>
                 </div>
                 <select id="link-select-${u.uid}" class="form-select" style="flex:1; min-width:220px;">
-                    <option value="">Person auswählen</option>
+                    <option value="">${t('unlinked_select_person', 'Person auswählen')}</option>
                     ${options}
                 </select>
-                <button class="btn btn-primary btn-small" style="width:auto;" data-uid="${escapeHtml(u.uid)}" onclick="assignUserToPerson(this.dataset.uid)">Zuordnen</button>
+                <button class="btn btn-primary btn-small" style="width:auto;" data-uid="${escapeHtml(u.uid)}" onclick="assignUserToPerson(this.dataset.uid)">${t('unlinked_assign_btn', 'Zuordnen')}</button>
             </div>
         `;
     }).join('');
 
+    const unlinkedTitle = t('unlinked_title', '🧩 Nicht zugeordnete Benutzer ({count})').replace('{count}', unlinked.length);
     target.innerHTML = `
         <div class="card" style="margin-bottom:20px;">
-            <div class="card-header">🧩 Nicht zugeordnete Benutzer (${unlinked.length})</div>
+            <div class="card-header">${unlinkedTitle}</div>
             <div class="card-body">
-                ${availablePeople.length === 0 ? '<div style="color:var(--text-secondary);">Keine freien Personen ohne Zuordnung vorhanden.</div>' : rows}
+                ${availablePeople.length === 0 ? `<div style="color:var(--text-secondary);">${t('unlinked_no_available_people', 'Keine freien Personen ohne Zuordnung vorhanden.')}</div>` : rows}
             </div>
         </div>
     `;
@@ -1769,10 +1771,10 @@ window.assignUserToPerson = async (uid) => {
     const select = document.getElementById(`link-select-${uid}`);
     if (!select) return;
     const personId = select.value;
-    if (!personId) { alert('Bitte eine Person auswählen.'); return; }
+    if (!personId) { alert(t('unlinked_alert_select_person', 'Bitte eine Person auswählen.')); return; }
 
     const person = people.find(p => String(p.id) === String(personId));
-    if (!person) { alert('Person nicht gefunden.'); return; }
+    if (!person) { alert(t('toast_person_not_found', 'Person nicht gefunden.')); return; }
 
     try {
         await update(ref(db, 'people/' + personId), { uid });
@@ -1782,7 +1784,7 @@ window.assignUserToPerson = async (uid) => {
         renderPeople();
     } catch (err) {
         console.error('Fehler beim Zuordnen:', err);
-        alert('Zuordnung fehlgeschlagen. Bitte erneut versuchen.');
+        alert(t('unlinked_alert_failed', 'Zuordnung fehlgeschlagen. Bitte erneut versuchen.'));
     }
 };
 
