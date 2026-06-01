@@ -339,5 +339,6 @@
   "timeline_no_note": "Keine Notiz",
   "timeline_no_entries": "Keine Einträge vorhanden.",
   "btn_close": "Schließen",
-  "details_receipts": "Belege"
+  "details_receipts": "Belege",
+  "receipt": "Beleg"
 }

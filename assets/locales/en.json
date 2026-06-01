@@ -339,5 +339,6 @@
   "timeline_no_note": "No note",
   "timeline_no_entries": "No entries found.",
   "btn_close": "Close",
-  "details_receipts": "Receipts"
+  "details_receipts": "Receipts",
+  "receipt": "Receipt"
 }
