@@ -61,6 +61,40 @@ function t(key, fallback = '') {
     return translations[key] || fallback;
 }
 
+function translateStatusText(text) {
+    if (!text) return '';
+    const cleanText = text.trim();
+    if (cleanText === 'Alles in Ordnung') return t('status_all_ok', 'Alles in Ordnung');
+    if (cleanText === 'Zahlung überfällig') return t('status_payment_overdue', 'Zahlung überfällig');
+    if (cleanText === 'Keine Zahlungen') return t('status_no_payments', 'Keine Zahlungen');
+    if (cleanText === 'läuft diesen Monat ab') return t('status_expires_this_month', 'läuft diesen Monat ab');
+    if (cleanText === 'läuft nächsten Monat ab') return t('status_expires_next_month', 'läuft nächsten Monat ab');
+    
+    // Check for "X Monate überfällig" or "1 Monat überfällig"
+    const overdueMatch = cleanText.match(/(\d+)\s+Monat[e]?\s+überfällig/);
+    if (overdueMatch) {
+        const months = overdueMatch[1];
+        if (months === '1') {
+            return t('status_one_month_overdue', '1 Monat überfällig');
+        } else {
+            return t('status_months_overdue', '{months} Monate überfällig').replace('{months}', months);
+        }
+    }
+    
+    // Check for "noch X Monate" or "noch 1 Monat"
+    const leftMatch = cleanText.match(/noch\s+(\d+)\s+Monat[e]?/);
+    if (leftMatch) {
+        const months = leftMatch[1];
+        if (months === '1') {
+            return t('status_one_month_left', 'noch 1 Monat');
+        } else {
+            return t('status_months_left', 'noch {months} Monate').replace('{months}', months);
+        }
+    }
+    
+    return text;
+}
+
 function getStatusLabels(withEmoji = false) {
     if (withEmoji) {
         return {
@@ -88,6 +122,11 @@ function applyTranslations() {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         if (translations[key]) el.setAttribute('placeholder', translations[key]);
+    });
+    // Translate elements with data-i18n-aria-label
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria-label');
+        if (translations[key]) el.setAttribute('aria-label', translations[key]);
     });
     // Sync language selection dropdowns
     const langSelect = document.getElementById('settings-language');
@@ -2067,7 +2106,7 @@ window.renderEditReceiptsList = async function() {
 };
 
 window.deleteEditReceipt = function(filename) {
-    if (confirm("Möchtest du diesen Beleg wirklich löschen?")) {
+    if (confirm(t('confirm_delete_receipt', 'Möchtest du diesen Beleg wirklich löschen?'))) {
         currentEditedReceipts = currentEditedReceipts.filter(fn => fn !== filename);
         renderEditReceiptsList();
     }
@@ -2368,13 +2407,13 @@ function renderPeople() {
 
     let overdueHtml = '';
     if(overdueItems.length > 0) {
-        overdueHtml += `<h3 class="list-section-title" style="color:var(--danger)">Überfällig (${overdueItems.length})</h3>`;
+        overdueHtml += `<h3 class="list-section-title" style="color:var(--danger)">${t('overdue_header', 'Überfällig')} (${overdueItems.length})</h3>`;
         overdueHtml += overdueItems.map(item => generatePersonHTML(item.p, item)).join('');
     }
 
     let validHtml = '';
     if(currentItems.length > 0) {
-        validHtml += `<h3 class="list-section-title" style="color:var(--success)">Aktuelle Mitglieder (${currentItems.length})</h3>`;
+        validHtml += `<h3 class="list-section-title" style="color:var(--success)">${t('current_members_header', 'Aktuelle Mitglieder')} (${currentItems.length})</h3>`;
         validHtml += currentItems.map(item => generatePersonHTML(item.p, item)).join('');
     }
 
@@ -2470,7 +2509,7 @@ function generatePersonHTML(p, preCalcData = null) {
 
     const currentStatus = p._currentStatus || p.status;
 
-    let dateText = paidUntil ? monthYearFormatter.format(paidUntil) : 'Nie';
+    let dateText = paidUntil ? monthYearFormatter.format(paidUntil) : t('never_paid', 'Nie');
     let pillClass = 'status-ok';
     let cardClass = 'success';
 
@@ -2486,7 +2525,7 @@ function generatePersonHTML(p, preCalcData = null) {
     const hasStandingOrder = standingOrders.length > 0;
     const soListHtml = hasStandingOrder ? `
         <div class="card" style="margin-top:15px; margin-bottom:15px; background:var(--surface-alt);">
-            <div class="card-header" style="font-size:0.9rem; padding:10px 15px;">🔄 Aktive Daueraufträge</div>
+            <div class="card-header" style="font-size:0.9rem; padding:10px 15px;">${t('active_standing_orders', '🔄 Aktive Daueraufträge')}</div>
             <div class="card-body" style="padding:10px 15px;">
                 ${standingOrders.map(so => {
                     const isEnded = so.endDate && new Date(so.endDate) < new Date();
@@ -2495,14 +2534,14 @@ function generatePersonHTML(p, preCalcData = null) {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px; ${style}">
                         <div>
                             <div style="font-size:0.9rem; font-weight:600;">${formatCurrency(so.amount)} € / Monat</div>
-                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(so.note || 'Ohne Notiz')}</div>
+                            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:2px;">${escapeHtml(so.note || t('no_note', 'Ohne Notiz'))}</div>
                             <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
                                 Start: ${formatDateFast(so.startDate)}
                                 ${so.endDate ? `<br>Ende: ${formatDateFast(so.endDate)}` : ''}
                             </div>
                         </div>
                         ${(true) ? `
-                        <button class="btn-icon text-danger" data-pid="${escapeHtml(p.id)}" data-soid="${escapeHtml(so.id)}" onclick="openEndStandingOrderModal(this.dataset.pid, this.dataset.soid)" title="Bearbeiten/Beenden" style="background:none; border:none; padding:4px;">
+                        <button class="btn-icon text-danger" data-pid="${escapeHtml(p.id)}" data-soid="${escapeHtml(so.id)}" onclick="openEndStandingOrderModal(this.dataset.pid, this.dataset.soid)" title="${escapeHtml(t('edit_end_title', 'Bearbeiten/Beenden'))}" style="background:none; border:none; padding:4px;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                         </button>
                         ` : ''}
@@ -2513,6 +2552,10 @@ function generatePersonHTML(p, preCalcData = null) {
         </div>
     ` : '';
 
+    const translatedStatus = getStatusLabels(false)[currentStatus] || currentStatus;
+    const translatedPStatus = getStatusLabels(false)[p.status] || p.status;
+    const translatedStatusMetaText = translateStatusText(statusMeta.text);
+
     return `
         <div class="person-wrapper">
             <div id="person-item-${p.id}" class="person-item" role="button" tabindex="0" aria-expanded="false" data-id="${escapeHtml(p.id)}" onclick="toggleDetails(this.dataset.id)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); toggleDetails(this.dataset.id);}">
@@ -2522,11 +2565,11 @@ function generatePersonHTML(p, preCalcData = null) {
                             ${escapeHtml(p.name)}
                             <span class="chevron">›</span>
                         </div>
-                        <span class="person-status">${escapeHtml(currentStatus)}</span>
+                        <span class="person-status">${escapeHtml(translatedStatus)}</span>
                     </div>
                     <div class="person-right">
                         ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `<span class="payment-pill ${pillClass}">${dateText}</span>`}
-                        <span class="time-remaining">${escapeHtml(statusMeta.text)}</span>
+                        <span class="time-remaining">${escapeHtml(translatedStatusMetaText)}</span>
                     </div>
                 </div>
             </div>
@@ -2536,16 +2579,16 @@ function generatePersonHTML(p, preCalcData = null) {
                     <div class="details-status-card ${cardClass}">
                         ${(statusMeta.isActiveStandingOrder && !statusMeta.isOverdue) ? '' : `
                         <div class="details-row">
-                            <span class="details-label">Bezahlt bis</span>
+                            <span class="details-label">${t('paid_until', 'Bezahlt bis')}</span>
                             <span class="details-value">${dateText}</span>
                         </div>`}
                         <div class="details-row">
-                            <span class="details-label">Status</span>
-                            <span class="details-value" style="text-transform:capitalize">${p.status}</span>
+                            <span class="details-label">${t('status_label', 'Status')}</span>
+                            <span class="details-value" style="text-transform:capitalize">${escapeHtml(translatedPStatus)}</span>
                         </div>
                         ${statusMeta.isOverdue ? `
                         <div class="details-row" style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,0,0,0.05)">
-                            <span class="details-label text-danger">Offener Betrag</span>
+                            <span class="details-label text-danger">${t('overdue_amount_label', 'Offener Betrag')}</span>
                             <span class="details-value text-danger">${formatCurrency(overdueAmount)} €</span>
                         </div>
                         ` : ''}
@@ -2556,29 +2599,29 @@ function generatePersonHTML(p, preCalcData = null) {
                     <div class="details-actions" style="${(currentUser && !currentUser.admin) ? 'display:none' : ''}">
                         <button class="btn btn-primary" data-id="${escapeHtml(p.id)}" onclick="openPaymentModal(this.dataset.id)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12"></path><path d="M4 14h9"></path><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"></path></svg>
-                            Zahlung erfassen
+                            ${t('record_payment_btn', 'Zahlung erfassen')}
                         </button>
                         <div class="secondary-actions">
                             <button class="btn btn-secondary" data-id="${escapeHtml(p.id)}" onclick="openChangeStatusModal(this.dataset.id)">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                                Status
+                                ${t('status_btn', 'Status')}
                             </button>
                             <button class="btn btn-secondary" data-id="${escapeHtml(p.id)}" onclick="sendStatusEmail(this.dataset.id)">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                                E-Mail
+                                ${t('email_btn', 'E-Mail')}
                             </button>
                         </div>
                     </div>
 
-                    <div class="history-header">Verlauf</div>
+                    <div class="history-header">${t('history_label', 'Verlauf')}</div>
                     <div id="timeline-${p.id}">
-                        <div style="padding:10px; color:var(--text-secondary); font-size:0.8rem; font-style:italic;">Lade Verlauf...</div>
+                        <div style="padding:10px; color:var(--text-secondary); font-size:0.8rem; font-style:italic;">${t('loading_history', 'Lade Verlauf...')}</div>
                     </div>
 
                     <div style="display: ${!(currentUser && currentUser.admin) ? 'none' : 'flex'}; justify-content: flex-end; margin-top: 20px;">
                         <button class="btn btn-secondary btn-small" style="border-color: var(--danger); color: var(--danger); font-size: 0.85rem; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px;" data-id="${escapeHtml(p.id)}" onclick="deletePersonClick(this.dataset.id)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                            Mitglied löschen
+                            ${t('delete_member_btn', 'Mitglied löschen')}
                         </button>
                     </div>
                 </div>
@@ -2761,7 +2804,7 @@ window.renderHistoryTab = async function(resetLimit = true) {
         transactionTotalItems = data.totalItems;
 
         if (!cachedTransactions || cachedTransactions.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:30px 20px; color:var(--text-secondary);">Keine Buchungen vorhanden.</div>';
+            container.innerHTML = `<div style="text-align:center; padding:30px 20px; color:var(--text-secondary);">${t('no_transactions', 'Keine Buchungen vorhanden.')}</div>`;
             return;
         }
 
@@ -2770,24 +2813,24 @@ window.renderHistoryTab = async function(resetLimit = true) {
         let lastDateFormatted = null;
         let html = '';
 
-        cachedTransactions.forEach((t, index) => {
-            const tDateFormatted = t.date ? formatDateFast(t.date) : 'Kein Datum';
+        cachedTransactions.forEach((tData, index) => {
+            const tDateFormatted = tData.date ? formatDateFast(tData.date) : t('no_date', 'Kein Datum');
 
             if (tDateFormatted !== lastDateFormatted) {
                 html += `<div style="margin: ${index === 0 ? '0' : '20px'} 0 8px 10px; font-weight: bold; font-size: 0.9rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">${tDateFormatted}</div>`;
                 lastDateFormatted = tDateFormatted;
             }
 
-            const isExp = t.type === 'exp';
+            const isExp = tData.type === 'exp';
             const color = isExp ? 'text-danger' : 'text-success';
             const sign = isExp ? '-' : '+';
 
             let iconSvg = '';
             let iconClass = '';
-            if (t.type === 'pay') {
+            if (tData.type === 'pay') {
                 iconClass = 'pay';
                 iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
-            } else if (t.type === 'don') {
+            } else if (tData.type === 'don') {
                 iconClass = 'don';
                 iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
             } else {
@@ -2795,32 +2838,32 @@ window.renderHistoryTab = async function(resetLimit = true) {
                 iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>';
             }
 
-            const hasReceipt = t.receipt ? '<span style="margin-left:5px" title="Beleg vorhanden">📷</span>' : '';
+            const hasReceipt = tData.receipt ? `<span style="margin-left:5px" title="${escapeHtml(t('modal_expense_receipt', 'Beleg vorhanden'))}">📷</span>` : '';
 
             const editBtn = isSuperAdmin ? `
                 <button class="btn btn-secondary btn-small" style="padding: 6px; border-radius: 8px; margin-left: 10px;"
                     onclick="event.stopPropagation(); editRecordedPaymentByIndex(${index})"
-                    aria-label="Bearbeiten">
+                    aria-label="${escapeHtml(t('edit_end_title', 'Bearbeiten'))}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 </button>
             ` : '';
 
-            const uidAttr = (t.type === 'pay' && t.personUid) ? ` data-uid="${t.personUid}"` : '';
+            const uidAttr = (tData.type === 'pay' && tData.personUid) ? ` data-uid="${tData.personUid}"` : '';
 
-            let descHtml = t.description ? escapeHtml(t.description) : '-';
+            let descHtml = tData.description ? escapeHtml(tData.description) : '-';
             html += `
-                <div class="trans-item" role="button" tabindex="0" data-id="${escapeHtml(t.id)}" data-type="${escapeHtml(t.type)}" onclick="showTransactionDetails(this.dataset.id, this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails(this.dataset.id, this.dataset.type)}" style="cursor:pointer;">
+                <div class="trans-item" role="button" tabindex="0" data-id="${escapeHtml(tData.id)}" data-type="${escapeHtml(tData.type)}" onclick="showTransactionDetails(this.dataset.id, this.dataset.type)" onkeydown="if(event.key==='Enter'||event.key===' '){showTransactionDetails(this.dataset.id, this.dataset.type)}" style="cursor:pointer;">
                     <div style="display: flex; align-items: center; flex: 1;">
                         <div class="trans-icon-wrapper ${iconClass}"${uidAttr}>
                             ${iconSvg}
                         </div>
                         <div class="trans-left" style="flex: 1;">
-                            <span style="font-weight:600;">${escapeHtml(t.who)}</span>
+                            <span style="font-weight:600;">${escapeHtml(tData.who)}</span>
                             <div class="trans-meta">${descHtml} ${hasReceipt}</div>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center;">
-                        <div class="trans-amount ${color}" style="font-size: 1.1rem;">${sign}${formatCurrency(t.amount)}€</div>
+                        <div class="trans-amount ${color}" style="font-size: 1.1rem;">${sign}${formatCurrency(tData.amount)}€</div>
                         ${editBtn}
                     </div>
                 </div>
@@ -2828,10 +2871,13 @@ window.renderHistoryTab = async function(resetLimit = true) {
         });
 
         if (cachedTransactions.length < transactionTotalItems) {
+            const showingText = t('showing_transactions_count', 'Es werden {count} von {total} Buchungen angezeigt.')
+                .replace('{count}', cachedTransactions.length)
+                .replace('{total}', transactionTotalItems);
             html += `
                 <div style="text-align:center; padding:20px;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 12px;">Es werden ${cachedTransactions.length} von ${transactionTotalItems} Buchungen angezeigt.</div>
-                    <button class="btn btn-secondary" onclick="loadMoreHistory()">Mehr laden...</button>
+                    <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom: 12px;">${showingText}</div>
+                    <button class="btn btn-secondary" onclick="loadMoreHistory()">${t('load_more_btn', 'Mehr laden...')}</button>
                 </div>
             `;
         }
@@ -2847,7 +2893,7 @@ window.renderHistoryTab = async function(resetLimit = true) {
             const uid = wrapper.getAttribute('data-uid');
             getProfilePicUrl(uid).then(url => {
                 if (url) {
-                    wrapper.innerHTML = `<img src="${url}" alt="Profil" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
+                    wrapper.innerHTML = `<img src="${url}" alt="${escapeHtml(t('profile_pic_title', 'Profil'))}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
                     wrapper.style.background = 'transparent'; // Remove soft background color
                     wrapper.style.color = 'inherit'; // Reset color
                 }
@@ -2859,7 +2905,7 @@ window.renderHistoryTab = async function(resetLimit = true) {
         }
     } catch (err) {
         console.error('Fehler beim Laden der Transaktionen:', err);
-        container.innerHTML = '<div style="text-align:center; padding:30px 20px; color:var(--danger);">Fehler beim Laden der Buchungen.</div>';
+        container.innerHTML = `<div style="text-align:center; padding:30px 20px; color:var(--danger);">${t('error_loading_transactions', 'Fehler beim Laden der Buchungen.')}</div>`;
     }
 };
 
@@ -3147,7 +3193,7 @@ window.saveStandingOrderEnd = async () => {
 };
 
 window.deleteStandingOrderCompletely = async () => {
-    if (!confirm("Dauerauftrag wirklich komplett entfernen? Historie geht verloren.")) return;
+    if (!confirm(t('confirm_delete_so', 'Dauerauftrag wirklich komplett entfernen? Historie geht verloren.'))) return;
 
     try {
         await mutatePerson(editingPersonId, (person) => {
@@ -3166,7 +3212,7 @@ window.deleteStandingOrderCompletely = async () => {
 window.deleteEditedPayment = async () => {
     if (!isSuperAdminUser() || !currentEditedPayment) return;
 
-    if (!confirm('Achtung: Soll dieser Eintrag wirklich gelöscht werden? Dies kann nicht rückgängig gemacht werden.')) {
+    if (!confirm(t('confirm_delete_payment', 'Achtung: Soll dieser Eintrag wirklich gelöscht werden? Dies kann nicht rückgängig gemacht werden.'))) {
         return;
     }
 
