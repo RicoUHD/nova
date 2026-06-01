@@ -101,27 +101,34 @@ function translateStatusText(text) {
 }
 
 function getStatusLabels(withEmoji = false) {
-    if (withEmoji) {
-        return {
-            'vollverdiener': '💼 ' + t('member_status_full', 'Vollverdiener'),
-            'geringverdiener': '📉 ' + t('member_status_low', 'Geringverdiener'),
-            'keinverdiener': '🎓 ' + t('member_status_none', 'Keinverdiener'),
-            'pausiert': '⏸️ ' + t('member_status_paused', 'Pausiert')
-        };
-    }
-    return {
-        'vollverdiener': t('member_status_full', 'Vollverdiener'),
-        'geringverdiener': t('member_status_low', 'Geringverdiener'),
-        'keinverdiener': t('member_status_none', 'Keinverdiener'),
-        'pausiert': t('member_status_paused', 'Pausiert')
+    const raw = {
+        'vollverdiener': t('member_status_full', '💼 Vollverdiener'),
+        'geringverdiener': t('member_status_low', '📉 Geringverdiener'),
+        'keinverdiener': t('member_status_none', '🎓 Keinverdiener'),
+        'pausiert': t('member_status_paused', '⏸️ Pausiert')
     };
+    if (withEmoji) {
+        return raw;
+    }
+    const stripped = {};
+    for (const [k, v] of Object.entries(raw)) {
+        stripped[k] = v.replace(/^[💼📉🎓⏸️\s]+/u, '').trim();
+    }
+    return stripped;
 }
 
 function applyTranslations() {
     // Translate elements with data-i18n
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[key]) el.innerHTML = translations[key];
+        if (translations[key]) {
+            // Use innerHTML only if translation contains HTML tags (like <strong> or <br>)
+            if (translations[key].includes('<')) {
+                el.innerHTML = translations[key];
+            } else {
+                el.textContent = translations[key];
+            }
+        }
     });
     // Translate elements with data-i18n-placeholder
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
@@ -1558,7 +1565,7 @@ async function loadData(silent = false) {
     }
     } catch (err) {
         console.error("Ladefehler:", err);
-        alert("Fehler beim Laden der Daten. Bitte Seite neu laden.");
+        alert(t('alert_error_loading_data', 'Fehler beim Laden der Daten. Bitte Seite neu laden.'));
     } finally {
         // Ladebildschirm ausblenden
         if(loader && !silent) loader.style.display = 'none';
@@ -1959,15 +1966,15 @@ window.saveEditedPayment = async () => {
     const issuer = issuerEl ? issuerEl.value.trim() : '';
 
     if (Number.isNaN(amount)) {
-        alert('Ungültiger Betrag.');
+        alert(t('alert_invalid_amount', 'Ungültiger Betrag.'));
         return;
     }
     if (!date) {
-        alert('Bitte ein Datum angeben.');
+        alert(t('alert_please_enter_date', 'Bitte ein Datum angeben.'));
         return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        alert('Ungültiges Datum.');
+        alert(t('alert_invalid_date', 'Ungültiges Datum.'));
         return;
     }
 
@@ -2016,7 +2023,7 @@ window.saveEditedPayment = async () => {
                         currentEditedReceipts.push(fn);
                     } catch (uploadErr) {
                         console.error("Error uploading new receipt in edit:", uploadErr);
-                        alert("Fehler beim Hochladen von: " + files[i].name + " - " + uploadErr.message);
+                        alert(t('alert_upload_error_for', 'Fehler beim Hochladen von: ') + files[i].name + " - " + uploadErr.message);
                         throw uploadErr;
                     }
                 }
@@ -2236,15 +2243,15 @@ window.approveRequest = async (reqId) => {
 
         await update(ref(db, 'requests/' + reqId), { status: 'approved' });
         await loadData();
-        showToast('Anfrage genehmigt');
+        showToast(t('toast_request_approved', 'Anfrage genehmigt'));
     } catch (err) {
         console.error('Fehler beim Genehmigen der Anfrage:', err);
-        alert('Anfrage konnte nicht genehmigt werden. Bitte erneut versuchen.');
+        alert(t('alert_approve_failed', 'Anfrage konnte nicht genehmigt werden. Bitte erneut versuchen.'));
     }
 };
 
 window.rejectRequest = async (reqId) => {
-    const reason = prompt("Grund für Ablehnung:");
+    const reason = prompt(t('status_btn', 'Grund für Ablehnung') + ":");
     if(reason === null) return; // Cancelled
 
     try {
@@ -2253,10 +2260,10 @@ window.rejectRequest = async (reqId) => {
             rejectionReason: reason || 'Kein Grund angegeben'
         });
         await loadData();
-        showToast('Anfrage abgelehnt');
+        showToast(t('toast_request_rejected', 'Anfrage abgelehnt'));
     } catch (err) {
         console.error('Fehler beim Ablehnen der Anfrage:', err);
-        alert('Anfrage konnte nicht abgelehnt werden. Bitte erneut versuchen.');
+        alert(t('alert_reject_failed', 'Anfrage konnte nicht abgelehnt werden. Bitte erneut versuchen.'));
     }
 };
 
@@ -2944,10 +2951,10 @@ window.addPerson = async () => {
         await renderAll();
         closeModal('add-person-modal');
         document.getElementById('new-person-name').value = ''; // Clear input on success
-        showToast('Person hinzugefügt');
+        showToast(t('toast_person_added', 'Person hinzugefügt'));
     } catch (err) {
         console.error('Fehler beim Anlegen der Person:', err);
-        alert('Speichern fehlgeschlagen. Bitte erneut versuchen.');
+        alert(t('alert_save_failed', 'Speichern fehlgeschlagen. Bitte erneut versuchen.'));
     } finally {
         setButtonLoading('btn-add-person', false);
     }
@@ -2990,7 +2997,7 @@ window.addPayment = async () => {
         });
 
         if (!updated) {
-            alert('Person nicht gefunden.');
+            alert(t('alert_person_not_found', 'Person nicht gefunden.'));
             return;
         }
 
@@ -3005,10 +3012,10 @@ window.addPayment = async () => {
         document.getElementById('payment-is-standing-order').checked = false;
         const lbl = document.getElementById('payment-date-label');
         if(lbl) lbl.innerText = 'Datum';
-        showToast('Zahlung gebucht');
+        showToast(t('toast_payment_booked', 'Zahlung gebucht'));
     } catch (err) {
         console.error('Fehler beim Speichern der Zahlung:', err);
-        alert('Zahlung konnte nicht gespeichert werden. Bitte erneut versuchen.');
+        alert(t('alert_save_payment_failed', 'Zahlung konnte nicht gespeichert werden. Bitte erneut versuchen.'));
     } finally {
         setButtonLoading('btn-add-payment', false);
     }
@@ -3033,10 +3040,10 @@ window.addDonation = async () => {
         closeModal('add-donation-modal');
         renderStats();
         renderSuperAdminPaymentEditor();
-        showToast('Spende gespeichert');
+        showToast(t('toast_donation_saved', 'Spende gespeichert'));
     } catch (err) {
         console.error('Fehler beim Speichern der Spende:', err);
-        alert('Spende konnte nicht gespeichert werden. Bitte erneut versuchen.');
+        alert(t('alert_save_donation_failed', 'Spende konnte nicht gespeichert werden. Bitte erneut versuchen.'));
     } finally {
         setButtonLoading('btn-add-donation', false);
     }
@@ -3070,7 +3077,7 @@ window.addExpense = async () => {
             receiptFilename = JSON.stringify(filenames);
         } catch (err) {
             console.error(err);
-            alert("Fehler beim Hochladen des Belegs: " + err.message);
+            alert(t('alert_receipt_upload_error', 'Fehler beim Hochladen des Belegs: ') + err.message);
             setButtonLoading('btn-add-expense', false);
             return;
         }
@@ -3096,10 +3103,10 @@ window.addExpense = async () => {
         document.getElementById('expense-issuer').value = '';
         document.getElementById('expense-desc').value = '';
         if(fileInput) fileInput.value = '';
-        showToast('Ausgabe gespeichert');
+        showToast(t('toast_expense_saved', 'Ausgabe gespeichert'));
     } catch (err) {
         console.error('Fehler beim Speichern der Ausgabe:', err);
-        alert('Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.');
+        alert(t('alert_save_expense_failed', 'Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.'));
     } finally {
         setButtonLoading('btn-add-expense', false);
     }
@@ -3153,7 +3160,7 @@ window.saveStandingOrderEnd = async () => {
     if (!editingPersonId || !editingSoId) return;
 
     const endDate = document.getElementById('end-so-date').value;
-    if (!endDate) { alert("Bitte Datum wählen"); return; }
+    if (!endDate) { alert(t('alert_please_choose_date', 'Bitte Datum wählen.')); return; }
 
     try {
         const updated = await mutatePerson(editingPersonId, (person) => {
@@ -3191,10 +3198,10 @@ window.saveStandingOrderEnd = async () => {
 
         await renderAll();
         closeModal('end-standing-order-modal');
-        showToast('Dauerauftrag aktualisiert');
+        showToast(t('toast_so_updated', 'Dauerauftrag aktualisiert'));
     } catch (err) {
         console.error('Fehler beim Beenden:', err);
-        alert('Fehler beim Speichern.');
+        alert(t('alert_save_error', 'Fehler beim Speichern.'));
     }
 };
 
@@ -3208,10 +3215,10 @@ window.deleteStandingOrderCompletely = async () => {
         });
         await renderAll();
         closeModal('end-standing-order-modal');
-        showToast('Dauerauftrag gelöscht');
+        showToast(t('toast_so_deleted', 'Dauerauftrag gelöscht'));
     } catch (err) {
         console.error('Fehler beim Löschen:', err);
-        alert('Fehler beim Löschen.');
+        alert(t('alert_delete_error', 'Fehler beim Löschen.'));
     }
 };
 
@@ -3252,7 +3259,7 @@ window.deleteEditedPayment = async () => {
         if (typeof loadData === 'function') loadData();
     } catch (e) {
         console.error("Error deleting payment:", e);
-        alert('Fehler beim Löschen des Eintrags.');
+        alert(t('alert_delete_entry_error', 'Fehler beim Löschen des Eintrags.'));
     }
 };
 
@@ -3390,7 +3397,7 @@ window.saveStatusChange = async () => {
     const changeDate = document.getElementById('change-status-date').value;
 
     if (!changeDate) {
-        alert("Bitte ein Datum angeben.");
+        alert(t('alert_please_enter_date', 'Bitte ein Datum angeben.'));
         return;
     }
 
@@ -3433,16 +3440,16 @@ window.saveStatusChange = async () => {
         });
 
         if (!updated) {
-            alert('Person nicht gefunden.');
+            alert(t('alert_person_not_found', 'Person nicht gefunden.'));
             return;
         }
 
         await renderAll();
         closeModal('change-status-modal');
-        showToast('Status geändert');
+        showToast(t('toast_status_changed', 'Status geändert'));
     } catch (err) {
         console.error('Fehler bei der Statusänderung:', err);
-        alert('Statusänderung fehlgeschlagen: ' + err.message);
+        alert(t('alert_status_change_failed', 'Statusänderung fehlgeschlagen: ') + err.message);
     }
 };
 
@@ -3514,10 +3521,10 @@ window.saveAdvancedSystemConfig = async () => {
             throw new Error(errMsg);
         }
         advancedConfigAppName = appName;
-        showToast('System-Konfiguration gespeichert');
+        showToast(t('toast_config_saved', 'System-Konfiguration gespeichert'));
     } catch (err) {
         console.error('Fehler beim Speichern der erweiterten Konfiguration:', err);
-        alert(`Erweiterte Konfiguration konnte nicht gespeichert werden: ${err.message || 'Unbekannter Fehler'}`);
+        alert(t('alert_config_save_failed', 'Erweiterte Konfiguration konnte nicht gespeichert werden: ') + (err.message || t('setup_err_unknown', 'Unbekannter Fehler')));
     }
 };
 
@@ -3562,10 +3569,10 @@ window.saveAiConfig = async () => {
         }
         aiEnabled = payload.enabled;
         updateAiNavVisibility();
-        showToast('KI-Einstellungen gespeichert');
+        showToast(t('toast_ai_saved', 'KI-Einstellungen gespeichert'));
     } catch (err) {
         console.error('Fehler beim Speichern der KI-Einstellungen:', err);
-        alert(`KI-Einstellungen konnten nicht gespeichert werden: ${err.message || 'Unbekannter Fehler'}`);
+        alert(t('alert_ai_save_failed', 'KI-Einstellungen konnten nicht gespeichert werden: ') + (err.message || t('setup_err_unknown', 'Unbekannter Fehler')));
     }
 };
 
@@ -3973,7 +3980,7 @@ window.uploadChurchLogo = async () => {
     if (!isSuperAdminUser()) return;
     const fileInput = document.getElementById('super-admin-logo-file');
     if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        alert('Bitte eine SVG-Datei auswählen.');
+        alert(t('alert_please_select_svg', 'Bitte eine SVG-Datei auswählen.'));
         return;
     }
 
@@ -4010,12 +4017,12 @@ window.uploadChurchLogo = async () => {
             img.src = `assets/church-logo.svg${cacheBust}`;
         });
         fileInput.value = '';
-        showToast('Logo aktualisiert');
+        showToast(t('toast_logo_updated', 'Logo aktualisiert'));
     } catch (err) {
         const errMsg = err.message || err.code || 'Unbekannter Fehler';
         console.error('Fehler beim Logo-Upload:', errMsg, err);
-        alert(`Logo konnte nicht aktualisiert werden: ${errMsg}`);
-        showToast('Logo konnte nicht aktualisiert werden', 'error');
+        alert(t('alert_logo_update_failed', 'Logo konnte nicht aktualisiert werden: ') + errMsg);
+        showToast(t('toast_logo_update_failed', 'Logo konnte nicht aktualisiert werden'), 'error');
     }
 };
 
@@ -4035,10 +4042,10 @@ window.saveSettings = async () => {
             currentUser.emailNotifications = emailNotifications;
         }
         await renderAll();
-        showToast("Einstellungen gespeichert");
+        showToast(t('toast_settings_saved', 'Einstellungen gespeichert'));
     } catch (err) {
         console.error('Fehler beim Speichern der Einstellungen:', err);
-        alert('Einstellungen konnten nicht gespeichert werden.');
+        alert(t('alert_settings_save_failed', 'Einstellungen konnten nicht gespeichert werden.'));
     }
 };
 
@@ -4049,12 +4056,12 @@ window.changePassword = async (isUser = false) => {
     const oldPw = document.getElementById(oldInputId).value;
 
     if(!oldPw) {
-        alert("Bitte geben Sie Ihr altes Passwort ein.");
+        alert(t('alert_enter_old_password', 'Bitte geben Sie Ihr altes Passwort ein.'));
         return;
     }
 
     if(!pw || pw.length < 6) {
-        alert("Neues Passwort muss mindestens 6 Zeichen lang sein.");
+        alert(t('alert_new_password_length', 'Neues Passwort muss mindestens 6 Zeichen lang sein.'));
         return;
     }
 
@@ -4062,15 +4069,15 @@ window.changePassword = async (isUser = false) => {
         const user = auth.currentUser;
         if(user) {
             await updatePassword(user, oldPw, pw);
-            showToast("Passwort erfolgreich geändert");
+            showToast(t('toast_password_changed', 'Passwort erfolgreich geändert'));
             document.getElementById(inputId).value = '';
             document.getElementById(oldInputId).value = '';
         } else {
-            alert("Kein Benutzer angemeldet.");
+            alert(t('alert_no_user_logged_in', 'Kein Benutzer angemeldet.'));
         }
     } catch (error) {
         console.error(error);
-        alert("Fehler beim Ändern des Passworts: " + error.message);
+        alert(t('alert_password_change_failed', 'Fehler beim Ändern des Passworts: ') + error.message);
     }
 };
 
@@ -4397,7 +4404,7 @@ window.submitUserRequest = async () => {
 
     // Find person ID linked to current user
     const person = people.find(p => p.uid === currentUser.uid);
-    if(!person) { alert("Kein Personenprofil gefunden."); return; }
+    if(!person) { alert(t('alert_no_person_profile', 'Kein Personenprofil gefunden.')); return; }
 
     const reqData = {};
     const date = document.getElementById('req-date').value;
@@ -4407,8 +4414,8 @@ window.submitUserRequest = async () => {
         const note = document.getElementById('req-note').value;
         const isStandingOrder = document.getElementById('req-is-standing-order') && document.getElementById('req-is-standing-order').checked;
 
-        if(!amount || !date) { alert("Bitte alle Felder ausfüllen"); return; }
-        if(isNaN(parseFloat(amount))) { alert("Ungültiger Betrag"); return; }
+        if(!amount || !date) { alert(t('alert_fill_fields', 'Bitte alle Felder ausfüllen.')); return; }
+        if(isNaN(parseFloat(amount))) { alert(t('alert_invalid_amount', 'Ungültiger Betrag.')); return; }
 
         reqData.amount = amount;
         reqData.date = date;
@@ -4419,13 +4426,13 @@ window.submitUserRequest = async () => {
         }
     } else if(currentRequestType === 'status') {
         const status = document.getElementById('req-status').value;
-        if(!status || !date) { alert("Bitte alle Felder ausfüllen"); return; }
+        if(!status || !date) { alert(t('alert_fill_fields', 'Bitte alle Felder ausfüllen.')); return; }
         reqData.newStatus = status;
         reqData.date = date;
     } else if(currentRequestType === 'expense') {
         const amount = document.getElementById('req-amount').value.replace(',', '.');
         const desc = document.getElementById('req-desc').value;
-        if(!amount || !desc || !date) { alert("Bitte alle Felder ausfüllen"); return; }
+        if(!amount || !desc || !date) { alert(t('alert_fill_fields', 'Bitte alle Felder ausfüllen.')); return; }
         reqData.amount = amount;
         reqData.description = desc;
         reqData.date = date;
@@ -4441,7 +4448,7 @@ window.submitUserRequest = async () => {
                 }
                 reqData.receipt = JSON.stringify(filenames);
              } catch(err) {
-                 alert("Fehler beim Hochladen: " + err.message);
+                 alert(t('alert_upload_error', 'Fehler beim Hochladen: ') + err.message);
                  setButtonLoading('btn-submit-request', false);
                  return;
              }
@@ -4464,7 +4471,7 @@ window.submitUserRequest = async () => {
     try {
         await set(ref(db, 'requests/' + newReq.id), newReq);
         closeModal('user-request-modal');
-        showToast("Anfrage erfolgreich gesendet");
+        showToast(t('toast_request_sent', 'Anfrage erfolgreich gesendet'));
         loadData();
 
         // Notify opted-in admins using the backend endpoint to avoid frontend permission denied errors
@@ -4484,7 +4491,7 @@ window.submitUserRequest = async () => {
 
     } catch (err) {
         console.error('Fehler beim Senden der Anfrage:', err);
-        alert('Anfrage konnte nicht gesendet werden. Bitte erneut versuchen.');
+        alert(t('alert_send_request_failed', 'Anfrage konnte nicht gesendet werden. Bitte erneut versuchen.'));
     } finally {
         setButtonLoading('btn-submit-request', false);
     }
@@ -4499,7 +4506,7 @@ window.generateNewCode = async () => {
         document.getElementById('admin-invite-code').value = newCode;
     } catch (err) {
         console.error('Fehler beim Generieren des Codes:', err);
-        alert('Neuer Code konnte nicht gespeichert werden.');
+        alert(t('alert_save_code_failed', 'Neuer Code konnte nicht gespeichert werden.'));
     }
 };
 

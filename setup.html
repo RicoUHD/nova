@@ -199,7 +199,13 @@
     function applyTranslations() {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
-            if (translations[key]) el.innerHTML = translations[key];
+            if (translations[key]) {
+                if (translations[key].includes('<')) {
+                    el.innerHTML = translations[key];
+                } else {
+                    el.textContent = translations[key];
+                }
+            }
         });
         document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
             const key = el.getAttribute('data-i18n-placeholder');
