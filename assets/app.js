@@ -20,6 +20,23 @@ let advancedConfigAppName = null;
 let superAdminPaymentRows = [];
 let superAdminUserRows = [];
 let currentEditedPayment = null;
+let currentEditedReceipts = [];
+
+function parseReceipts(receiptField) {
+    if (!receiptField) return [];
+    if (Array.isArray(receiptField)) return receiptField.filter(Boolean);
+    const trimmed = String(receiptField).trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+            return JSON.parse(trimmed).filter(Boolean);
+        } catch (e) {
+            // fallback
+        }
+    }
+    return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+}
+
 let sseConnection = null;
 let aiEnabled = false;
 let aiMessages = [];
@@ -1778,12 +1795,23 @@ window.editRecordedPayment = async (personId, paymentId, paymentIndex, personNam
     const issuerGroup = document.getElementById('edit-payment-issuer-group');
     const issuerEl = document.getElementById('edit-payment-issuer');
 
+    const receiptsGroup = document.getElementById('edit-payment-receipts-group');
     if (type === 'expense') {
         if (issuerGroup) issuerGroup.style.display = 'block';
         if (issuerEl) issuerEl.value = payment.issuer || payment.name || '';
+        
+        if (receiptsGroup) receiptsGroup.style.display = 'block';
+        const newReceiptInput = document.getElementById('edit-payment-new-receipt');
+        if (newReceiptInput) newReceiptInput.value = '';
+        
+        currentEditedReceipts = parseReceipts(payment.receipt);
+        renderEditReceiptsList();
     } else {
         if (issuerGroup) issuerGroup.style.display = 'none';
         if (issuerEl) issuerEl.value = '';
+        
+        if (receiptsGroup) receiptsGroup.style.display = 'none';
+        currentEditedReceipts = [];
     }
 
     openModal('edit-payment-modal');
@@ -1833,6 +1861,12 @@ window.saveEditedPayment = async () => {
         return;
     }
 
+    const saveBtn = document.querySelector('#edit-payment-modal button.btn-primary');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Speichert...";
+    }
+
     try {
         if (currentEditedPayment.type === 'payment') {
             await mutatePerson(currentEditedPayment.personId, (draft) => {
@@ -1862,12 +1896,29 @@ window.saveEditedPayment = async () => {
             }
             showToast('Spende aktualisiert');
         } else if (currentEditedPayment.type === 'expense') {
+            // Upload new files first
+            const fileInput = document.getElementById('edit-payment-new-receipt');
+            if (fileInput && fileInput.files.length > 0) {
+                const files = fileInput.files;
+                for (let i = 0; i < files.length; i++) {
+                    try {
+                        const fn = await uploadReceipt(files[i], issuer || 'Beleg', date);
+                        currentEditedReceipts.push(fn);
+                    } catch (uploadErr) {
+                        console.error("Error uploading new receipt in edit:", uploadErr);
+                        alert("Fehler beim Hochladen von: " + files[i].name + " - " + uploadErr.message);
+                        throw uploadErr;
+                    }
+                }
+            }
+
             const remoteExpenses = safeList(await apiGet('expenses').catch(() => []));
             const targetExpenseId = currentEditedPayment.paymentId;
             const idx = remoteExpenses.findIndex(e => String(e.id) === String(targetExpenseId));
 
             if (idx >= 0) {
-                remoteExpenses[idx] = { ...remoteExpenses[idx], amount, date, description, issuer };
+                const updatedReceiptField = currentEditedReceipts.length > 0 ? JSON.stringify(currentEditedReceipts) : '';
+                remoteExpenses[idx] = { ...remoteExpenses[idx], amount, date, description, issuer, receipt: updatedReceiptField };
                 await set(ref(db, 'expenses'), { ...remoteExpenses });
                 expenses = remoteExpenses;
             }
@@ -1876,12 +1927,84 @@ window.saveEditedPayment = async () => {
 
         closeModal('edit-payment-modal');
         currentEditedPayment = null;
+        currentEditedReceipts = [];
         renderPeople();
         renderStats();
         renderSuperAdminPaymentEditor();
     } catch (err) {
         console.error('Fehler beim Bearbeiten:', err);
         showToast('Eintrag konnte nicht aktualisiert werden', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerText = "Speichern";
+        }
+    }
+};
+
+window.renderEditReceiptsList = async function() {
+    const listEl = document.getElementById('edit-payment-receipts-list');
+    if (!listEl) return;
+    
+    listEl.innerHTML = '';
+    
+    if (currentEditedReceipts.length === 0) {
+        listEl.innerHTML = '<div style="color:var(--text-secondary); font-size:0.85rem;">Keine Belege vorhanden.</div>';
+        return;
+    }
+    
+    // Create a local copy to preserve order
+    const listCopy = [...currentEditedReceipts];
+    
+    for (const filename of listCopy) {
+        const itemDiv = document.createElement('div');
+        itemDiv.style = "display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--surface-alt); border:1px solid var(--border); border-radius:12px; padding:8px 12px; transition: transform 0.2s;";
+        
+        // Show loading state
+        itemDiv.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+                <div class="spinner" style="width:16px; height:16px; border-width:2px; margin:0;"></div>
+                <span style="font-size:0.85rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; color:var(--text-secondary);">${escapeHtml(filename)}</span>
+            </div>
+        `;
+        listEl.appendChild(itemDiv);
+        
+        try {
+            const imgUrl = await fetchReceiptImage(filename);
+            itemDiv.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+                    <img src="${imgUrl}" style="width:40px; height:40px; object-fit:cover; border-radius:8px; border:1px solid var(--border);" alt="Beleg">
+                    <span style="font-size:0.85rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; color:var(--text); font-weight:600;">${escapeHtml(filename)}</span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <a href="${imgUrl}" download="${filename}" class="btn btn-secondary btn-small" style="background:var(--surface); border:1px solid var(--border); color:var(--text); text-decoration:none; padding:6px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px;" title="Herunterladen">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </a>
+                    <button type="button" class="btn btn-danger btn-small" style="padding:6px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px;" onclick="deleteEditReceipt('${escapeHtml(filename)}')" title="Löschen">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            `;
+        } catch (e) {
+            itemDiv.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+                    <span style="font-size:1.25rem;">⚠️</span>
+                    <span style="font-size:0.85rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; color:var(--text);">${escapeHtml(filename)}</span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn btn-danger btn-small" style="padding:6px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px;" onclick="deleteEditReceipt('${escapeHtml(filename)}')" title="Löschen">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            `;
+        }
+    }
+};
+
+window.deleteEditReceipt = function(filename) {
+    if (confirm("Möchtest du diesen Beleg wirklich löschen?")) {
+        currentEditedReceipts = currentEditedReceipts.filter(fn => fn !== filename);
+        renderEditReceiptsList();
     }
 };
 
@@ -2832,7 +2955,12 @@ window.addExpense = async () => {
     if (fileInput && fileInput.files.length > 0) {
         try {
             setButtonLoading('btn-add-expense', true, "Lade hoch...");
-            receiptFilename = await uploadReceipt(fileInput.files[0], issuer, date);
+            const filenames = [];
+            for (let i = 0; i < fileInput.files.length; i++) {
+                const fn = await uploadReceipt(fileInput.files[i], issuer, date);
+                filenames.push(fn);
+            }
+            receiptFilename = JSON.stringify(filenames);
         } catch (err) {
             console.error(err);
             alert("Fehler beim Hochladen des Belegs: " + err.message);
@@ -4153,8 +4281,8 @@ window.openUserRequestModal = (type) => {
                 <input type="date" id="req-date" class="form-input" value="${new Date().toISOString().split('T')[0]}">
             </div>
             <div class="form-group">
-                <label class="form-label" for="req-receipt">Beleg (Optional)</label>
-                <input type="file" id="req-receipt" accept="image/*,.heic,.heif" class="form-input">
+                <label class="form-label" for="req-receipt">Beleg(e) (Optional)</label>
+                <input type="file" id="req-receipt" accept="image/*,.heic,.heif" class="form-input" multiple>
             </div>
         `;
     }
@@ -4204,7 +4332,12 @@ window.submitUserRequest = async () => {
         if (fileInput && fileInput.files.length > 0) {
              setButtonLoading('btn-submit-request', true, "Lade hoch...");
              try {
-                reqData.receipt = await uploadReceipt(fileInput.files[0], person.name, date);
+                const filenames = [];
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    const fn = await uploadReceipt(fileInput.files[i], person.name, date);
+                    filenames.push(fn);
+                }
+                reqData.receipt = JSON.stringify(filenames);
              } catch(err) {
                  alert("Fehler beim Hochladen: " + err.message);
                  setButtonLoading('btn-submit-request', false);
@@ -4740,24 +4873,50 @@ window.fetchReceiptImage = async function(filename) {
     }
 };
 
-window.viewRequestReceipt = async function(filename, containerId) {
+window.viewRequestReceipt = async function(receiptField, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // Revoke previous URL if any
-    if (container.dataset.blobUrl) {
-        URL.revokeObjectURL(container.dataset.blobUrl);
-        delete container.dataset.blobUrl;
+    // Revoke previous URLs if any
+    if (container.dataset.blobUrls) {
+        try {
+            const urls = JSON.parse(container.dataset.blobUrls);
+            urls.forEach(url => URL.revokeObjectURL(url));
+        } catch(e) {}
+        delete container.dataset.blobUrls;
     }
 
-    container.innerHTML = '<div class="spinner" style="margin:10px auto;"></div><div style="text-align:center; font-size:0.8rem; color:var(--text-secondary);">Lade Beleg...</div>';
+    container.innerHTML = '<div class="spinner" style="margin:10px auto;"></div><div style="text-align:center; font-size:0.8rem; color:var(--text-secondary);">Lade Beleg(e)...</div>';
 
     try {
-        const imgUrl = await fetchReceiptImage(filename);
-        container.dataset.blobUrl = imgUrl;
-        container.innerHTML = `
-                <img src="${imgUrl}" style="width:100%; max-width:100%; border-radius:8px; border:1px solid var(--border); margin-top:10px; opacity:0; transition:opacity 0.3s ease-in;" onload="this.style.opacity=1" alt="Beleg">
-        `;
+        const filenames = parseReceipts(receiptField);
+        if (filenames.length === 0) {
+            container.innerHTML = `<div style="color:var(--text-secondary); font-size:0.8rem; margin-top:10px;">Kein Beleg vorhanden.</div>`;
+            return;
+        }
+
+        const imgUrls = [];
+        let html = '<div style="display:flex; flex-direction:column; gap:15px; margin-top:10px;">';
+        
+        for (const filename of filenames) {
+            const imgUrl = await fetchReceiptImage(filename);
+            imgUrls.push(imgUrl);
+            html += `
+                <div style="position:relative; border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface-alt);">
+                    <img src="${imgUrl}" style="width:100%; max-width:100%; border-radius:6px; opacity:0; transition:opacity 0.3s ease-in;" onload="this.style.opacity=1" alt="Beleg">
+                    <div style="margin-top:8px; display:flex; gap:10px; justify-content:flex-end;">
+                        <a href="${imgUrl}" download="${filename}" class="btn btn-secondary btn-small" style="background:var(--surface); border:1px solid var(--border); color:var(--text); text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:4px 8px; font-size:0.8rem;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Herunterladen
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+
+        container.dataset.blobUrls = JSON.stringify(imgUrls);
+        container.innerHTML = html;
     } catch (err) {
         console.error(err);
         container.innerHTML = `<div style="color:var(--danger); font-size:0.8rem; margin-top:10px;">Fehler beim Laden des Belegs.</div>`;
@@ -4829,17 +4988,48 @@ window.showTransactionDetails = async function(id, type) {
 
     if (item.receipt) {
         const receiptContainer = document.getElementById('receipt-container');
-        receiptContainer.innerHTML = '<div class="spinner" style="margin:20px auto;"></div><div style="text-align:center">Lade Beleg...</div>';
+        receiptContainer.innerHTML = '<div class="spinner" style="margin:20px auto;"></div><div style="text-align:center">Lade Belege...</div>';
+
+        // Revoke previous URLs if any
+        if (content.dataset.blobUrls) {
+            try {
+                const urls = JSON.parse(content.dataset.blobUrls);
+                urls.forEach(url => URL.revokeObjectURL(url));
+            } catch(e) {}
+            delete content.dataset.blobUrls;
+        }
 
         try {
-            const imgUrl = await fetchReceiptImage(item.receipt);
-            content.dataset.blobUrl = imgUrl;
-            receiptContainer.innerHTML = `
-                <div style="font-weight:600; margin-bottom:10px;">Beleg</div>
-                <img src="${imgUrl}" style="width:100%; border-radius:12px; border:1px solid var(--border); opacity:0; transition:opacity 0.3s ease-in;" onload="this.style.opacity=1" alt="Beleg">
-            `;
+            const filenames = parseReceipts(item.receipt);
+            if (filenames.length === 0) {
+                receiptContainer.innerHTML = `<div style="color:var(--text-secondary); text-align:center; font-size:0.9rem;">Kein Beleg vorhanden.</div>`;
+                return;
+            }
+
+            const imgUrls = [];
+            let html = '<div style="font-weight:600; margin-bottom:10px;">Belege</div><div style="display:flex; flex-direction:column; gap:15px;">';
+            
+            for (const filename of filenames) {
+                const imgUrl = await fetchReceiptImage(filename);
+                imgUrls.push(imgUrl);
+                html += `
+                    <div style="position:relative; border:1px solid var(--border); border-radius:12px; padding:10px; background:var(--surface-alt);">
+                        <img src="${imgUrl}" style="width:100%; border-radius:8px; opacity:0; transition:opacity 0.3s ease-in;" onload="this.style.opacity=1" alt="Beleg">
+                        <div style="margin-top:10px; display:flex; gap:10px; justify-content:flex-end;">
+                            <a href="${imgUrl}" download="${filename}" class="btn btn-secondary btn-small" style="background:var(--surface); border:1px solid var(--border); color:var(--text); text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:0.85rem; border-radius:8px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Herunterladen
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+
+            content.dataset.blobUrls = JSON.stringify(imgUrls);
+            receiptContainer.innerHTML = html;
         } catch (err) {
-            receiptContainer.innerHTML = `<div style="color:var(--danger); text-align:center;">Beleg konnte nicht geladen werden.</div>`;
+            receiptContainer.innerHTML = `<div style="color:var(--danger); text-align:center;">Belege konnten nicht geladen werden.</div>`;
         }
     } else {
         document.getElementById('receipt-container').innerHTML = `<div style="color:var(--text-secondary); text-align:center; font-size:0.9rem;">Kein Beleg vorhanden.</div>`;

@@ -771,6 +771,13 @@
             <label class="form-label" for="edit-payment-issuer">Wer / Empfänger</label>
             <input type="text" id="edit-payment-issuer" class="form-input" placeholder="Name">
         </div>
+        <div class="form-group" id="edit-payment-receipts-group" style="display:none; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+            <label class="form-label" style="font-weight: 600;">Belege verwalten</label>
+            <div id="edit-payment-receipts-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;"></div>
+            
+            <label class="form-label" for="edit-payment-new-receipt" style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 10px;">Beleg(e) hinzufügen</label>
+            <input type="file" id="edit-payment-new-receipt" accept="image/*,.heic,.heif" class="form-input" multiple>
+        </div>
         <button class="btn btn-primary btn-block" onclick="saveEditedPayment()">Speichern</button>
     </div>
 </div>
@@ -837,8 +844,8 @@
             <input type="date" id="expense-date" class="form-input">
         </div>
         <div class="form-group">
-            <label for="expense-receipt" class="form-label">Beleg</label>
-            <input type="file" id="expense-receipt" accept="image/*,.heic,.heif" class="form-input">
+            <label class="form-label" for="expense-receipt">Beleg</label>
+            <input type="file" id="expense-receipt" accept="image/*,.heic,.heif" class="form-input" multiple>
         </div>
         <button id="btn-add-expense" class="btn btn-primary btn-block" onclick="addExpense()">Speichern</button>
     </div>
