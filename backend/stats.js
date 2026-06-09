@@ -71,12 +71,10 @@ async function aggregateStats(appConfig) {
       if (!isFuture) {
         totalInc += amount;
         processEvent(amount, payDateStr);
-      }
 
-      if (!startStr && !isFuture) {
-        periodInc += amount;
-      } else if (startStr && payDateStr >= startStr) {
-        periodInc += amount;
+        if (!startStr || payDateStr >= startStr) {
+          periodInc += amount;
+        }
       }
     });
   });
@@ -89,12 +87,10 @@ async function aggregateStats(appConfig) {
     if (!isFuture) {
       totalInc += amount;
       processEvent(amount, dDateStr);
-    }
 
-    if (!startStr && !isFuture) {
-      periodInc += amount;
-    } else if (startStr && dDateStr >= startStr) {
-      periodInc += amount;
+      if (!startStr || dDateStr >= startStr) {
+        periodInc += amount;
+      }
     }
   });
 
@@ -107,12 +103,10 @@ async function aggregateStats(appConfig) {
     if (!isFuture) {
       totalExp += amount;
       processEvent(-amount, eDateStr);
-    }
 
-    if (!startStr && !isFuture) {
-      periodExp += amount;
-    } else if (startStr && eDateStr >= startStr) {
-      periodExp += amount;
+      if (!startStr || eDateStr >= startStr) {
+        periodExp += amount;
+      }
     }
   });
 
