@@ -56,12 +56,12 @@ async function aggregateStats(appConfig) {
 
     if (Array.isArray(p.payments)) {
       p.payments.forEach(pay => {
-        if (!pay.date || pay.date > todayStr) return; // Exclude future payments
+        if (!pay.date || String(pay.date).slice(0, 10) > todayStr) return; // Exclude future payments
 
         const amount = parseFloat(pay.amount) || 0;
         totalInc += amount;
 
-        if (!startStr || pay.date >= startStr) {
+        if (!startStr || String(pay.date).slice(0, 10) >= startStr) {
           periodInc += amount;
         }
         processEvent(amount, pay.date);
@@ -70,12 +70,12 @@ async function aggregateStats(appConfig) {
   });
 
   donations.forEach(d => {
-    if (!d.date || d.date > todayStr) return; // Exclude future donations
+    if (!d.date || String(d.date).slice(0, 10) > todayStr) return; // Exclude future donations
 
     const amount = parseFloat(d.amount) || 0;
     totalInc += amount;
 
-    if (!startStr || d.date >= startStr) {
+    if (!startStr || String(d.date).slice(0, 10) >= startStr) {
       periodInc += amount;
     }
     processEvent(amount, d.date);
@@ -83,12 +83,12 @@ async function aggregateStats(appConfig) {
 
   expenses.forEach(record => {
     const e = record.data || record;
-    if (!e.date || e.date > todayStr) return; // Exclude future expenses
+    if (!e.date || String(e.date).slice(0, 10) > todayStr) return; // Exclude future expenses
 
     const amount = parseFloat(e.amount) || 0;
     totalExp += amount;
 
-    if (!startStr || e.date >= startStr) {
+    if (!startStr || String(e.date).slice(0, 10) >= startStr) {
       periodExp += amount;
     }
     processEvent(-amount, e.date);
