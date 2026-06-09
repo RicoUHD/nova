@@ -47,18 +47,52 @@ async function buildDatabaseSnapshot(appConfig) {
       getStateValue(appConfig, 'donations', {}).catch(() => ({}))
     ]);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayY = today.getFullYear();
+    const todayM = String(today.getMonth() + 1).padStart(2, '0');
+    const todayD = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${todayY}-${todayM}-${todayD}`;
+
+    const toDateStr = (d) => {
+      if (!d) return '1970-01-01'; // Fallback for legacy items
+      if (d instanceof Date) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      return String(d).slice(0, 10);
+    };
+
     // Aggregate summary statistics
     const membersByStatus = {};
     let totalPaidAcrossMembers = 0;
     for (const p of people) {
       const status = p.status || 'unknown';
       membersByStatus[status] = (membersByStatus[status] || 0) + 1;
-      totalPaidAcrossMembers += parseFloat(p.totalPaid || 0);
+
+      const payments = Array.isArray(p.data?.payments) ? p.data.payments : [];
+      let memberPastPayments = 0;
+      payments.forEach(pay => {
+        const payDateStr = toDateStr(pay.date);
+        if (payDateStr > todayStr) return; // Exclude future payments
+        memberPastPayments += parseFloat(pay.amount) || 0;
+      });
+      totalPaidAcrossMembers += memberPastPayments;
     }
+
+    let totalDonations = 0;
+    Object.values(donations || {}).forEach(d => {
+      const dDateStr = toDateStr(d.date);
+      if (dDateStr > todayStr) return; // Exclude future donations
+      totalDonations += parseFloat(d.amount || 0);
+    });
+    totalPaidAcrossMembers += totalDonations; // Include donations in total income
 
     let totalExpenses = 0;
     for (const e of expenses) {
-      totalExpenses += parseFloat(e.amount || 0);
+      const record = e.data || e;
+      const eDateStr = toDateStr(record.date);
+      if (eDateStr > todayStr) continue; // Exclude future expenses
+      totalExpenses += parseFloat(record.amount || 0);
     }
 
     // Build full member records (no uid, no raw data blob)
