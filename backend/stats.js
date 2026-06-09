@@ -65,43 +65,55 @@ async function aggregateStats(appConfig) {
 
     p.payments.forEach(pay => {
       const payDateStr = toDateStr(pay.date);
-      if (payDateStr > todayStr) return; // Exclude strictly future payments
-
+      const isFuture = payDateStr > todayStr;
       const amount = Number(String(pay.amount || 0).replace(',', '.'));
-      totalInc += amount;
 
-      if (!startStr || payDateStr >= startStr) {
+      if (!isFuture) {
+        totalInc += amount;
+        processEvent(amount, payDateStr);
+      }
+
+      if (!startStr && !isFuture) {
+        periodInc += amount;
+      } else if (startStr && payDateStr >= startStr) {
         periodInc += amount;
       }
-      processEvent(amount, payDateStr);
     });
   });
 
   donations.forEach(d => {
     const dDateStr = toDateStr(d.date);
-    if (dDateStr > todayStr) return; // Exclude future donations
-
+    const isFuture = dDateStr > todayStr;
     const amount = Number(String(d.amount || 0).replace(',', '.'));
-    totalInc += amount;
 
-    if (!startStr || dDateStr >= startStr) {
+    if (!isFuture) {
+      totalInc += amount;
+      processEvent(amount, dDateStr);
+    }
+
+    if (!startStr && !isFuture) {
+      periodInc += amount;
+    } else if (startStr && dDateStr >= startStr) {
       periodInc += amount;
     }
-    processEvent(amount, dDateStr);
   });
 
   expenses.forEach(record => {
     const e = record.data || record;
     const eDateStr = toDateStr(e.date);
-    if (eDateStr > todayStr) return; // Exclude future expenses
-
+    const isFuture = eDateStr > todayStr;
     const amount = Number(String(e.amount || 0).replace(',', '.'));
-    totalExp += amount;
 
-    if (!startStr || eDateStr >= startStr) {
+    if (!isFuture) {
+      totalExp += amount;
+      processEvent(-amount, eDateStr);
+    }
+
+    if (!startStr && !isFuture) {
+      periodExp += amount;
+    } else if (startStr && eDateStr >= startStr) {
       periodExp += amount;
     }
-    processEvent(-amount, eDateStr);
   });
 
   const totalBalance = totalInc - totalExp;
