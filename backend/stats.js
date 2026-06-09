@@ -41,6 +41,12 @@ async function aggregateStats(appConfig) {
   let currentBalance = 0;
   const eventsByDay = {};
 
+  // Helper to safely extract YYYY-MM-DD from Strings or Date Objects
+  const toDateStr = (d) => {
+    if (!d) return '';
+    return (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10);
+  };
+
   const processEvent = (amount, dateStr) => {
     if (!dateStr) return;
     if (dateStr < cutoffStr) {
@@ -52,30 +58,30 @@ async function aggregateStats(appConfig) {
 
   people.forEach(record => {
     const p = record.data;
-    if (!p) return;
+    if (!p || !Array.isArray(p.payments)) return;
 
-    if (Array.isArray(p.payments)) {
-      p.payments.forEach(pay => {
-        if (!pay.date || String(pay.date).slice(0, 10) > todayStr) return; // Exclude future payments
+    p.payments.forEach(pay => {
+      const payDateStr = toDateStr(pay.date);
+      if (payDateStr && payDateStr > todayStr) return; // Exclude strictly future payments, but include legacy ones missing a date
 
-        const amount = parseFloat(pay.amount) || 0;
-        totalInc += amount;
+      const amount = parseFloat(pay.amount) || 0;
+      totalInc += amount;
 
-        if (!startStr || String(pay.date).slice(0, 10) >= startStr) {
-          periodInc += amount;
-        }
-        processEvent(amount, pay.date);
-      });
-    }
+      if (!startStr || payDateStr >= startStr) {
+        periodInc += amount;
+      }
+      processEvent(amount, pay.date);
+    });
   });
 
   donations.forEach(d => {
-    if (!d.date || String(d.date).slice(0, 10) > todayStr) return; // Exclude future donations
+    const dDateStr = toDateStr(d.date);
+    if (dDateStr && dDateStr > todayStr) return; // Exclude future donations
 
     const amount = parseFloat(d.amount) || 0;
     totalInc += amount;
 
-    if (!startStr || String(d.date).slice(0, 10) >= startStr) {
+    if (!startStr || dDateStr >= startStr) {
       periodInc += amount;
     }
     processEvent(amount, d.date);
@@ -83,12 +89,13 @@ async function aggregateStats(appConfig) {
 
   expenses.forEach(record => {
     const e = record.data || record;
-    if (!e.date || String(e.date).slice(0, 10) > todayStr) return; // Exclude future expenses
+    const eDateStr = toDateStr(e.date);
+    if (eDateStr && eDateStr > todayStr) return; // Exclude future expenses
 
     const amount = parseFloat(e.amount) || 0;
     totalExp += amount;
 
-    if (!startStr || String(e.date).slice(0, 10) >= startStr) {
+    if (!startStr || eDateStr >= startStr) {
       periodExp += amount;
     }
     processEvent(-amount, e.date);
