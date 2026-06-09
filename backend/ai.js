@@ -184,7 +184,7 @@ async function buildDatabaseSnapshot(appConfig) {
  * @param {string} dbSnapshot - JSON string from buildDatabaseSnapshot.
  */
 function buildSystemPrompt(appName, dbSnapshot) {
-  return `You are a helpful support assistant for the ${appName || 'Nova'} church management application. Answer admin questions about the application data, members, finances, and settings. Be concise and helpful.\n\nCurrent database context:\n${dbSnapshot}`;
+  return `You are a helpful support assistant for the ${appName || 'Nova'} church management application. Answer admin questions about the application data, members, finances, and settings. Be concise and helpful. When asked to calculate totals for a specific time frame, you must carefully iterate through all expenses, donations, and member payments, explicitly checking if each record's date falls within the requested range before summing them. Do not rely on estimates.\n\nCurrent database context:\n${dbSnapshot}`;
 }
 
 module.exports = { getAiSettings, setAiSettings, buildDatabaseSnapshot, buildSystemPrompt };
