@@ -47,23 +47,50 @@ async function buildDatabaseSnapshot(appConfig) {
       getStateValue(appConfig, 'donations', {}).catch(() => ({}))
     ]);
 
+    const today = new Date();
+    const todayY = today.getFullYear();
+    const todayM = String(today.getMonth() + 1).padStart(2, '0');
+    const todayD = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${todayY}-${todayM}-${todayD}`;
+
+    const toDateStr = (d) => {
+      if (!d) return '1970-01-01'; // Fallback for legacy items
+      if (d instanceof Date) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      return String(d).slice(0, 10);
+    };
+
     // Aggregate summary statistics
     const membersByStatus = {};
     let totalPaidAcrossMembers = 0;
     for (const p of people) {
       const status = p.status || 'unknown';
       membersByStatus[status] = (membersByStatus[status] || 0) + 1;
-      totalPaidAcrossMembers += Number(String(p.totalPaid || 0).replace(',', '.'));
+
+      const payments = Array.isArray(p.data?.payments) ? p.data.payments : [];
+      for (const pay of payments) {
+        const payDateStr = toDateStr(pay.date);
+        if (payDateStr <= todayStr) {
+          totalPaidAcrossMembers += Number(String(pay.amount || 0).replace(',', '.'));
+        }
+      }
     }
 
     let totalExpenses = 0;
     for (const e of expenses) {
-      totalExpenses += Number(String(e.amount || 0).replace(',', '.'));
+      const eDateStr = toDateStr(e.date);
+      if (eDateStr <= todayStr) {
+        totalExpenses += Number(String(e.amount || 0).replace(',', '.'));
+      }
     }
 
     let totalDonations = 0;
     for (const d of Object.values(donations || {})) {
-      totalDonations += Number(String(d.amount || 0).replace(',', '.'));
+      const dDateStr = toDateStr(d.date);
+      if (dDateStr <= todayStr) {
+        totalDonations += Number(String(d.amount || 0).replace(',', '.'));
+      }
     }
 
     // Build full member records (no uid, no raw data blob)
