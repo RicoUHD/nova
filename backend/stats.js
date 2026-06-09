@@ -41,10 +41,13 @@ async function aggregateStats(appConfig) {
   let currentBalance = 0;
   const eventsByDay = {};
 
-  // Helper to safely extract YYYY-MM-DD from Strings or Date Objects
+  // Helper to safely extract YYYY-MM-DD from Strings or Date Objects consistently in local time
   const toDateStr = (d) => {
-    if (!d) return '';
-    return (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10);
+    if (!d) return '1970-01-01'; // Fallback for legacy items so they are included in history
+    if (d instanceof Date) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return String(d).slice(0, 10);
   };
 
   const processEvent = (amount, dateStr) => {
@@ -62,7 +65,7 @@ async function aggregateStats(appConfig) {
 
     p.payments.forEach(pay => {
       const payDateStr = toDateStr(pay.date);
-      if (payDateStr && payDateStr > todayStr) return; // Exclude strictly future payments, but include legacy ones missing a date
+      if (payDateStr > todayStr) return; // Exclude strictly future payments
 
       const amount = parseFloat(pay.amount) || 0;
       totalInc += amount;
@@ -70,13 +73,13 @@ async function aggregateStats(appConfig) {
       if (!startStr || payDateStr >= startStr) {
         periodInc += amount;
       }
-      processEvent(amount, pay.date);
+      processEvent(amount, payDateStr);
     });
   });
 
   donations.forEach(d => {
     const dDateStr = toDateStr(d.date);
-    if (dDateStr && dDateStr > todayStr) return; // Exclude future donations
+    if (dDateStr > todayStr) return; // Exclude future donations
 
     const amount = parseFloat(d.amount) || 0;
     totalInc += amount;
@@ -84,13 +87,13 @@ async function aggregateStats(appConfig) {
     if (!startStr || dDateStr >= startStr) {
       periodInc += amount;
     }
-    processEvent(amount, d.date);
+    processEvent(amount, dDateStr);
   });
 
   expenses.forEach(record => {
     const e = record.data || record;
     const eDateStr = toDateStr(e.date);
-    if (eDateStr && eDateStr > todayStr) return; // Exclude future expenses
+    if (eDateStr > todayStr) return; // Exclude future expenses
 
     const amount = parseFloat(e.amount) || 0;
     totalExp += amount;
@@ -98,7 +101,7 @@ async function aggregateStats(appConfig) {
     if (!startStr || eDateStr >= startStr) {
       periodExp += amount;
     }
-    processEvent(-amount, e.date);
+    processEvent(-amount, eDateStr);
   });
 
   const totalBalance = totalInc - totalExp;
@@ -120,20 +123,20 @@ async function aggregateStats(appConfig) {
       currentBalance += eventsByDay[dayStr];
     }
 
-    dataPoints.push({ x: i, y: currentBalance, date: d });
+    dataPoints.push({ x: i, y: Math.round(currentBalance * 100) / 100, date: d });
 
     if (currentBalance < minVal) minVal = currentBalance;
     if (currentBalance > maxVal) maxVal = currentBalance;
   }
 
   return {
-    totalBalance,
-    totalIncome: periodInc,
-    totalExpenses: periodExp,
+    totalBalance: Math.round(totalBalance * 100) / 100,
+    totalIncome: Math.round(periodInc * 100) / 100,
+    totalExpenses: Math.round(periodExp * 100) / 100,
     chartData: {
       dataPoints,
-      minVal,
-      maxVal
+      minVal: Math.round(minVal * 100) / 100,
+      maxVal: Math.round(maxVal * 100) / 100
     }
   };
 }
