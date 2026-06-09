@@ -3,6 +3,7 @@ const {
   listExpenseRecords,
   getStateRecord
 } = require('./pocketbase');
+const { toDateStr } = require('./utils/date');
 
 async function aggregateStats(appConfig) {
   // ⚡ Bolt: Fetch independent records concurrently to reduce endpoint latency.
@@ -40,23 +41,6 @@ async function aggregateStats(appConfig) {
 
   let currentBalance = 0;
   const eventsByDay = {};
-
-  // Helper to safely extract YYYY-MM-DD from Strings or Date Objects consistently in local time
-  const toDateStr = (d) => {
-    if (!d) return '1970-01-01'; // Fallback for legacy items so they are included in history
-    if (d instanceof Date) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
-    const str = String(d);
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      return str.slice(0, 10);
-    }
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) {
-      return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-    }
-    return '1970-01-01';
-  };
 
   const processEvent = (amount, dateStr) => {
     if (!dateStr) return;
