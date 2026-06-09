@@ -525,7 +525,7 @@ function toOptionalText(value) {
 
 function toFiniteNumber(value) {
   if (value === undefined || value === null || value === '') return null;
-  const parsed = Number(value);
+  const parsed = Number(String(value).replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -534,7 +534,7 @@ function calculateTotalPaid(payments) {
   const list = normalizeRecordListInput(payments);
   let sum = 0;
   for (let i = 0; i < list.length; i++) {
-    const amount = Number(list[i]?.amount);
+    const amount = Number(String(list[i]?.amount || '').replace(',', '.'));
     if (Number.isFinite(amount)) sum += amount;
   }
   return sum;

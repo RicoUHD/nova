@@ -32,13 +32,18 @@ async function setAiSettings(appConfig, patch) {
   return next;
 }
 
+const parseAmountFixed = (val) => {
+  const parsed = Number(String(val || '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 /**
  * Builds a full database context snapshot for the AI system prompt.
  * Includes all member, expense, request, and user records.
  */
 async function buildDatabaseSnapshot(appConfig) {
   try {
-    const [people, expenses, users, settings, requests, donations] = await Promise.all([
+    const [people, expenses, users, settings, requests, donationsState] = await Promise.all([
       listPeopleRecords(appConfig).catch(() => []),
       listExpenseRecords(appConfig).catch(() => []),
       listUserRecords(appConfig).catch(() => []),
@@ -47,18 +52,25 @@ async function buildDatabaseSnapshot(appConfig) {
       getStateValue(appConfig, 'donations', {}).catch(() => ({}))
     ]);
 
+    const donations = Object.values(donationsState || {});
+
     // Aggregate summary statistics
     const membersByStatus = {};
     let totalPaidAcrossMembers = 0;
     for (const p of people) {
       const status = p.status || 'unknown';
       membersByStatus[status] = (membersByStatus[status] || 0) + 1;
-      totalPaidAcrossMembers += parseFloat(p.totalPaid || 0);
+      totalPaidAcrossMembers += parseAmountFixed(p.totalPaid || 0);
+    }
+
+    let totalDonations = 0;
+    for (const d of donations) {
+      totalDonations += parseAmountFixed(d.amount || 0);
     }
 
     let totalExpenses = 0;
     for (const e of expenses) {
-      totalExpenses += parseFloat(e.amount || 0);
+      totalExpenses += parseAmountFixed(e.amount || 0);
     }
 
     // Build full member records (no uid, no raw data blob)
@@ -70,9 +82,9 @@ async function buildDatabaseSnapshot(appConfig) {
         status: p.status || '',
         memberSince: p.memberSince || '',
         originalMemberSince: p.originalMemberSince || p.memberSince || '',
-        totalPaid: Math.round(parseFloat(p.totalPaid || 0) * 100) / 100,
+        totalPaid: Math.round(parseAmountFixed(p.totalPaid || 0) * 100) / 100,
         payments: payments.map((pay) => ({
-          amount: Math.round(parseFloat(pay.amount || 0) * 100) / 100,
+          amount: Math.round(parseAmountFixed(pay.amount || 0) * 100) / 100,
           date: pay.date || '',
           description: pay.description || ''
         })),
@@ -87,7 +99,7 @@ async function buildDatabaseSnapshot(appConfig) {
     // Build expense records (no receipt field)
     const expenseRecords = expenses.map((e) => ({
       id: e.expenseKey,
-      amount: Math.round(parseFloat(e.amount || 0) * 100) / 100,
+      amount: Math.round(parseAmountFixed(e.amount || 0) * 100) / 100,
       date: e.date || '',
       issuer: e.issuer || '',
       description: e.description || ''
@@ -120,7 +132,7 @@ async function buildDatabaseSnapshot(appConfig) {
         membersByStatus,
         totalMemberPaymentsEur: Math.round(totalPaidAcrossMembers * 100) / 100,
         totalExpensesEur: Math.round(totalExpenses * 100) / 100,
-        estimatedBalanceEur: Math.round((totalPaidAcrossMembers - totalExpenses) * 100) / 100,
+        estimatedBalanceEur: Math.round((totalPaidAcrossMembers + totalDonations - totalExpenses) * 100) / 100,
         totalUsers: users.length,
         adminCount: users.filter((u) => u.admin === true).length
       },

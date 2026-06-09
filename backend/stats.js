@@ -4,6 +4,11 @@ const {
   getStateRecord
 } = require('./pocketbase');
 
+const parseAmountFixed = (val) => {
+  const parsed = Number(String(val || '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 async function aggregateStats(appConfig) {
   // ⚡ Bolt: Fetch independent records concurrently to reduce endpoint latency.
   // Expected impact: ~50-60% reduction in total query time (e.g., from ~120ms sequentially to ~50ms).
@@ -18,7 +23,6 @@ async function aggregateStats(appConfig) {
   const donations = Object.values(donationsObj || {});
 
   let periodInc = 0, periodExp = 0;
-  let totalInc = 0, totalExp = 0;
 
   const startStr = settings.reportStartDate || '';
 
@@ -36,8 +40,7 @@ async function aggregateStats(appConfig) {
   const eventsByDay = {};
 
   const processEvent = (amount, dateStr) => {
-    if (!dateStr) return;
-    if (dateStr < cutoffStr) {
+    if (!dateStr || dateStr < cutoffStr) {
       currentBalance += amount;
     } else {
       eventsByDay[dateStr] = (eventsByDay[dateStr] || 0) + amount;
@@ -47,42 +50,37 @@ async function aggregateStats(appConfig) {
   people.forEach(record => {
     const p = record.data;
     if (!p) return;
-    const pTotal = parseFloat(p.totalPaid || 0);
-    totalInc += pTotal;
+    const pTotal = parseAmountFixed(p.totalPaid || 0);
 
     if (startStr) {
       if (Array.isArray(p.payments)) {
         p.payments.forEach(pay => {
-          if (pay.date >= startStr) periodInc += parseFloat(pay.amount);
-          processEvent(parseFloat(pay.amount), pay.date);
+          if (pay.date >= startStr) periodInc += parseAmountFixed(pay.amount);
+          processEvent(parseAmountFixed(pay.amount), pay.date);
         });
       }
     } else {
       periodInc += pTotal;
       if (Array.isArray(p.payments)) {
         p.payments.forEach(pay => {
-          processEvent(parseFloat(pay.amount), pay.date);
+          processEvent(parseAmountFixed(pay.amount), pay.date);
         });
       }
     }
   });
 
   donations.forEach(d => {
-    const amount = parseFloat(d.amount);
-    totalInc += amount;
+    const amount = parseAmountFixed(d.amount);
     if (!startStr || d.date >= startStr) periodInc += amount;
     processEvent(amount, d.date);
   });
 
   expenses.forEach(record => {
     const e = record.data || record;
-    const amount = parseFloat(e.amount);
-    totalExp += amount;
+    const amount = parseAmountFixed(e.amount);
     if (!startStr || e.date >= startStr) periodExp += amount;
     processEvent(-amount, e.date);
   });
-
-  const totalBalance = totalInc - totalExp;
 
   const dataPoints = [];
   let minVal = currentBalance;
@@ -106,6 +104,8 @@ async function aggregateStats(appConfig) {
     if (currentBalance < minVal) minVal = currentBalance;
     if (currentBalance > maxVal) maxVal = currentBalance;
   }
+
+  const totalBalance = currentBalance;
 
   return {
     totalBalance,
