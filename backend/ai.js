@@ -101,6 +101,14 @@ async function buildDatabaseSnapshot(appConfig) {
           date: pay.date || '',
           description: pay.description || ''
         })),
+        standingOrders: (Array.isArray(p.data?.standingOrders) ? p.data.standingOrders : []).map((so) => ({
+          id: so.id || '',
+          amount: Math.round(Number(String(so.amount || 0).replace(',', '.')) * 100) / 100,
+          startDate: so.startDate || '',
+          endDate: so.endDate || '',
+          note: so.note || '',
+          lastAutoPayment: so.lastAutoPayment || ''
+        })),
         statusHistory: (Array.isArray(p.data?.statusHistory) ? p.data.statusHistory : []).map(h => ({
           status: h.status || '',
           startDate: h.startDate || '',
