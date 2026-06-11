@@ -218,6 +218,20 @@ function buildSystemPrompt(appName, dbSnapshot) {
 #### 6. System Setup Mode
 - If no configuration file exists at startup, the app boots in **Setup Mode**, locking the '/api/stream' endpoint and serving 'setup.html' instead of 'index.html'.
 - The first user to register after setup is automatically promoted to 'admin' and 'superAdmin'.
+
+#### 7. Frontend Navigation & UI Map
+The client-side SPA (Single Page Application) is controlled by 'assets/app.js' and 'index.html'.
+- **Role-based views**: On login, the user's role is checked. If 'admin' is true, the admin navigation buttons are displayed and 'overview' is loaded. If 'admin' is false, the user portal navigation buttons are displayed and 'user-overview' is loaded.
+- **Admin Navigation Tabs**:
+  - 'overview': Displays aggregated metrics cards, status counters, and a 90-day balance trend chart.
+  - 'people-view': Displays the member list table. Clicking a member opens the member detail modal which houses sections for: personal info, payments list (with a manual payment registration form), status history (with a history entry form), and standing orders (with a standing order configuration form).
+  - 'payment-history': Contains sub-tabs switching between list tables for completed Payments (Rechnungen), Donations (Spenden), Expenses (Ausgaben), and Requests (Anfragen). Clicking "Ausgabe hinzufügen" or "Spende hinzufügen" triggers their respective creation modals.
+  - 'settings': Contains settings sections (App config forms, SMTP configuration form, AI configuration form, custom logo SVG upload field, and the User Manager table where admins toggle admin/superAdmin flags on registered users).
+- **User Portal Navigation Tabs**:
+  - 'user-overview': Personal card view showing profile picture, current membership status, rate, paid-until date, balance status (Arrears/Credit), and active standing orders.
+  - 'user-history': Tables listing the user's personal payment history and status history.
+  - 'user-requests': Form to submit new request tickets (Zahlung einreichen, Statusänderung, Ausgabe einreichen, Dauerauftrag einrichten) and a list showing their status (Pending, Approved, Rejected).
+  - 'user-settings': Forms to upload profile pictures, update password, toggle email notifications, or link their user account to a member profile via invite code.
 ---
 
 Current database context:
