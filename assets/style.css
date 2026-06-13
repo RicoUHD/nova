@@ -2026,19 +2026,30 @@ details[open] .ai-thinking-summary::before {
     flex: 1;
     background: var(--bg);
     overflow-y: auto;
-    padding: 30px;
+    padding: 20px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    overflow-x: hidden;
+}
+
+.report-preview-scale-container {
+    width: calc(794px * var(--preview-scale, 1));
+    height: calc(var(--preview-height, 1120px) * var(--preview-scale, 1));
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: width 0.15s ease, height 0.15s ease;
 }
 
 .report-print-preview-wrapper {
     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
     background: white;
     border-radius: 4px;
-    display: inline-block;
-    width: 100%;
-    max-width: 800px;
+    width: 794px;
+    min-width: 794px;
+    transform: scale(var(--preview-scale, 1));
+    transform-origin: top left;
+    transition: transform 0.15s ease;
 }
 
 /* Print Preview Canvas - Strict Light Theme Layout */

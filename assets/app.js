@@ -3219,6 +3219,11 @@ window.updateReportPreview = function() {
         ${statsHtml}
         ${tableHtml}
     `;
+    
+    // Scale preview to fit screen reactively
+    requestAnimationFrame(() => {
+        window.resizeReportPreview();
+    });
 };
 
 window.downloadReportPdf = function() {
@@ -3244,6 +3249,30 @@ window.downloadReportPdf = function() {
         alert(currentLang === 'de' ? 'Fehler beim Erstellen der PDF-Datei.' : 'Failed to generate PDF.');
     });
 };
+
+window.resizeReportPreview = function() {
+    const viewport = document.querySelector('.report-preview-viewport');
+    const container = document.querySelector('.report-preview-scale-container');
+    const canvas = document.getElementById('report-print-preview');
+    if (!viewport || !container || !canvas) return;
+    
+    const padding = 40; // 20px padding left + 20px right
+    const viewportWidth = viewport.clientWidth - padding;
+    const a4Width = 794;
+    
+    const scale = Math.min(1, viewportWidth / a4Width);
+    viewport.style.setProperty('--preview-scale', scale);
+    
+    const canvasHeight = canvas.offsetHeight || 1120;
+    viewport.style.setProperty('--preview-height', `${canvasHeight}px`);
+};
+
+window.addEventListener('resize', () => {
+    const modal = document.getElementById('export-report-modal');
+    if (modal && modal.classList.contains('show')) {
+        window.resizeReportPreview();
+    }
+});
 
 window.addPerson = async () => {
     if (!validateRequired(['new-person-name', 'new-person-start'])) return;
